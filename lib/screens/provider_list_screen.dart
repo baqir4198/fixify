@@ -1,11 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:handyman_app/models/provider_model.dart';
+import 'package:handyman_app/screens/provider_detail_screen.dart';
 
 class ProviderListScreen extends StatelessWidget {
   final String categoryName;
   const ProviderListScreen({super.key, required this.categoryName});
-
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +24,22 @@ class ProviderListScreen extends StatelessWidget {
         itemCount: providers.length,
         itemBuilder: (context, index){
           final person = providers[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16,vertical: 8),
-            child: ListTile(
-              leading: CircleAvatar(backgroundImage: NetworkImage(person.imageUrl),),
-              title: Text(person.name,style: const TextStyle(fontWeight: FontWeight.bold),),
-              subtitle: Text("Rating: ⭐ ${person.rating}"),
-              trailing: Text("\$${person.pricePerHour}/hr", style: const TextStyle(color: Colors.green,fontWeight: FontWeight.bold),),
+          return GestureDetector(
+            onTap: (){
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context)=> ProviderDetailScreen(provider: person)
+                ),
+              );
+            },
+            child: Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16,vertical: 8),
+              child: ListTile(
+                leading: CircleAvatar(backgroundImage: NetworkImage(person.imageUrl),),
+                title: Text(person.name,style: const TextStyle(fontWeight: FontWeight.bold),),
+                subtitle: Text("Rating: ⭐ ${person.rating}"),
+                trailing: Text("\$${person.pricePerHour}/hr", style: const TextStyle(color: Colors.green,fontWeight: FontWeight.bold),),
+              ),
             ),
           );
         }
