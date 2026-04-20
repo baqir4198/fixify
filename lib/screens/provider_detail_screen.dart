@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/provider_model.dart';
+import '../services/storage_service.dart';
 
 class ProviderDetailScreen extends StatefulWidget {
   final ProviderModel provider;
@@ -53,8 +54,20 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           actions: [
             TextButton(onPressed: ()=> Navigator.pop(ctx), child: const Text("edit")),
             ElevatedButton(
-              onPressed: (){
+              onPressed: ()async{
+                Map<String,dynamic> newBooking = {
+                  'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                  'providerName': widget.provider.name,
+                  'profession': widget.provider.profession,
+                  'date':DateFormat('yyyy-MM-dd').format(_selectedDate!),
+                  'time': _selectedTime!.format(context),
+                  'status': 'Pending',
+                };
+                await StorageService.saveBooking(newBooking);
                 Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Booking Confirmed!")),
+                );
                 // Here we would save the booking!
               },
               child: const Text("confirm"),
@@ -113,9 +126,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           ),
             onPressed: (){
               _pickDateTime();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Booking functionality coming soon"))
-              );
             },
             child: const Text("Book Appointment", style: TextStyle(color: Colors.white,fontSize: 18),)),
       ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:handyman_app/screens/home_screen.dart';
+import 'package:handyman_app/screens/main_wrapper.dart';
 
 void main() {
   runApp(const HandyManApp());
@@ -14,7 +14,8 @@ class HandyManApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'HandyMan App',
-      home: HomeScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: MainWrapper(),
     );
   }
 }
