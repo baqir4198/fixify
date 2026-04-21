@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:handyman_app/screens/home_screen.dart';
 import 'package:handyman_app/screens/my_bookings_screen.dart';
+import 'package:handyman_app/screens/profile_screen.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -15,6 +16,7 @@ class _MainWrapperState extends State<MainWrapper> {
   final  List<Widget> _pages = [
     HomeScreen(),
     const MyBookingsScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -28,6 +30,7 @@ class _MainWrapperState extends State<MainWrapper> {
             _currentIndex = index;
           });
         },
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
@@ -41,6 +44,11 @@ class _MainWrapperState extends State<MainWrapper> {
             icon: Icon(Icons.calendar_today_outlined),
             activeIcon: Icon(Icons.calendar_today),
             label: "Bookings",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline,),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
           )
         ],
       ),

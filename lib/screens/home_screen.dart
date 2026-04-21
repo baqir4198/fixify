@@ -47,12 +47,14 @@ class HomeScreen extends StatelessWidget {
                     ),
                   itemCount: categories.length,
                   itemBuilder: (context, index){
+                      final service = categories[index];
                       return CategoryCard(
-                        service: categories[index],
+                        service: service,
                         onTap:(){
-                          Navigator.push(context,
+                          Navigator.push(
+                              context,
                             MaterialPageRoute(
-                                builder:(context)=>ProviderListScreen(categoryName: categories[index].name),
+                                builder:(context)=>ProviderListScreen(categoryName: service.name,)
                             )
                           );
                         }

@@ -44,8 +44,31 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           return ListView.builder(
             itemCount: bookings.length,
             itemBuilder: (context, index){
-              final item = bookings[index];
-              return _buildBookingCard(item);
+              final booking = bookings[index];
+              return Dismissible(
+                key: Key(booking.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16,vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  alignment: Alignment.centerRight,
+                  padding:  const EdgeInsets.only(right: 20),
+                  child: const Icon(Icons.delete_sweep,color: Colors.white,size: 30,),
+                ),
+                onDismissed: (direction) async{
+                  await StorageService.deleteBooking(booking.id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("${booking.provider.name} ki booking delete kr de gae h"),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                    )
+                  );
+                },
+                child: _buildBookingCard(booking),
+              );
             },
           );
         },

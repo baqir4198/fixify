@@ -6,6 +6,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
   static const String _bookingKey = 'user_bookings';
+  static const String _providerKey = 'custom_providers';
+
+
+  static Future<void> saveProvider(ProviderModel provider)async{
+    final prefs = await SharedPreferences.getInstance();
+    List<String> existingProviders = prefs.getStringList(_providerKey)??[];
+    existingProviders.add(jsonEncode(provider.toMap()));
+    await prefs.setStringList(_providerKey, existingProviders);
+  }
+  static Future<List<ProviderModel>> getSavedProviders() async{
+    final prefs = await SharedPreferences.getInstance();
+    List<String> providerRaw = prefs.getStringList(_providerKey)??[];
+    return providerRaw.map((p)=> ProviderModel.fromMap(jsonDecode(p))).toList();
+  }
 
   static Future<void> saveBooking(Map<String,dynamic> bookingData) async{
     final prefs = await SharedPreferences.getInstance();
@@ -25,6 +39,7 @@ class StorageService {
         time: data['time'],
         status: data['status'],
         provider: ProviderModel(
+            id:'',
             name: data['providerName'],
             profession: data['profession'],
             rating: 4.5,
@@ -33,5 +48,15 @@ class StorageService {
         ),
       );
     }).toList();
+  }
+  static Future<void> deleteBooking(String id)async{
+    final prefs = await SharedPreferences.getInstance();
+    List<String> bookingsRaw = prefs.getStringList(_bookingKey)??[];
+
+    bookingsRaw.removeWhere((item){
+      Map<String, dynamic> data = jsonDecode(item);
+      return data['id'] == id;
+    });
+    await prefs.setStringList(_bookingKey,bookingsRaw);
   }
 }
