@@ -12,24 +12,29 @@ class BecomeProviderScreen extends StatefulWidget {
 class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers to get data from text fields
+  // Controllers
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController(); // Naya controller
+  final _passwordController = TextEditingController(); // Naya controller
   final _priceController = TextEditingController();
   final _bioController = TextEditingController();
 
-  String _selectedCategory = 'Plumbing'; // Default category
+  String _selectedCategory = 'Plumbing';
   final List<String> _categories = ['Plumbing', 'Electrical', 'Cleaning', 'Painting', 'Carpentry', 'AC Repair'];
 
   void _submitData() async {
     if (_formKey.currentState!.validate()) {
-      // 1. Naya Provider object banayein
+      // 1. Naya Provider object banayein (Ab errors nahi ayenge)
       final newProvider = ProviderModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text,
+        email: _emailController.text.trim(),       // Updated
+        password: _passwordController.text.trim(), // Updated
         profession: _selectedCategory,
-        rating: 4.5, // New providers start with a default rating
-        pricePerHour: double.parse(_priceController.text),
-        imageUrl: 'https://i.pravatar.cc/150?u=${_nameController.text}', about: '', // Random avatar for now
+        rating: 4.5,
+        pricePerHour: double.tryParse(_priceController.text) ?? 0.0,
+        imageUrl: 'https://i.pravatar.cc/150?u=${_nameController.text}',
+        about: _bioController.text, // Bio ko about mein daal diya
       );
 
       // 2. Storage mein save karein
@@ -37,7 +42,7 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
 
       if (!mounted) return;
 
-      // 3. Success Message aur Screen se wapis jana
+      // 3. Success Message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Congratulations! You are now a Provider"), backgroundColor: Colors.green),
       );
@@ -66,11 +71,15 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
               const Text("Fill in the details to start earning.", style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 30),
 
-              // Name Field
               _buildTextField(_nameController, "Full Name", Icons.person, "Enter your name"),
               const SizedBox(height: 20),
 
-              // Category Dropdown
+              // Naye Email aur Password fields
+              _buildTextField(_emailController, "Email Address", Icons.email, "Enter your email"),
+              const SizedBox(height: 20),
+              _buildTextField(_passwordController, "Password", Icons.lock, "Create a password", isObscure: true),
+              const SizedBox(height: 20),
+
               const Text("Select your Expertise", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Container(
@@ -92,21 +101,18 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Price Field
-              _buildTextField(_priceController, "Price per Hour (\$)", Icons.attach_money, "e.g. 25", isNumber: true),
+              _buildTextField(_priceController, "Price per Hour (Rs.)", Icons.payments, "e.g. 1200", isNumber: true),
               const SizedBox(height: 20),
 
-              // Bio Field
               _buildTextField(_bioController, "Short Bio", Icons.description, "Tell users about your experience", maxLines: 3),
               const SizedBox(height: 40),
 
-              // Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Colors.blue[700],
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
                   onPressed: _submitData,
@@ -120,10 +126,11 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, String hint, {bool isNumber = false, int maxLines = 1}) {
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, String hint, {bool isNumber = false, bool isObscure = false, int maxLines = 1}) {
     return TextFormField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      obscureText: isObscure,
       maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,

@@ -22,6 +22,25 @@ class StorageService {
     return providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
   }
 
+  // --- NAYA FUNCTION: Profile Update karne ke liye ---
+  static Future<void> updateProvider(ProviderModel updatedProvider) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> providerRaw = prefs.getStringList(_providerKey) ?? [];
+
+    List<ProviderModel> providers = providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
+
+    // ID match karke index dhoondo
+    int index = providers.indexWhere((p) => p.id == updatedProvider.id);
+
+    if (index != -1) {
+      providers[index] = updatedProvider; // Purana data replace kar do
+
+      // Wapis String list bana kar save karo
+      List<String> updatedRaw = providers.map((p) => jsonEncode(p.toMap())).toList();
+      await prefs.setStringList(_providerKey, updatedRaw);
+    }
+  }
+
   // ================= BOOKING LOGIC =================
 
   static Future<void> saveBooking(BookingModel booking) async {
@@ -40,22 +59,17 @@ class StorageService {
     }).toList();
   }
 
-  // NEW: Status Update karne ka function
   static Future<void> updateBookingStatus(String id, String newStatus) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
 
-    // Saari bookings ko pehle list mein convert karein
     List<BookingModel> bookings = bookingsRaw.map((item) {
       return BookingModel.fromMap(jsonDecode(item));
     }).toList();
 
-    // Match hone wali ID ka status change karein
     int index = bookings.indexWhere((b) => b.id == id);
     if (index != -1) {
       bookings[index].status = newStatus;
-
-      // Update hone ke baad puri list ko wapis String list banayein
       List<String> updatedRaw = bookings.map((b) => jsonEncode(b.toMap())).toList();
       await prefs.setStringList(_bookingKey, updatedRaw);
     }
@@ -77,17 +91,11 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     List<String> providerRaw = prefs.getStringList(_providerKey) ?? [];
 
-    // Providers ko list mein convert karein
     List<ProviderModel> providers = providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
 
-    // Specific provider dhoondo
     int index = providers.indexWhere((p) => p.id == providerId);
     if (index != -1) {
-      // Purani rating aur nayi rating ka average bhi nikal sakte hain,
-      // lekin filhal hum direct update karte hain simple rakhne ke liye
       providers[index].rating = newRating;
-
-      // Wapis save karein
       List<String> updatedRaw = providers.map((p) => jsonEncode(p.toMap())).toList();
       await prefs.setStringList(_providerKey, updatedRaw);
     }

@@ -26,11 +26,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
   Future<void> _loadAllProviders() async {
     // 1. Dummy Data
-    final List<ProviderModel> dummyProviders = [
-      ProviderModel(id: '1', name: 'Ali Ahmad', profession: 'Carpentry', rating: 4.8, pricePerHour: 25.0, imageUrl: "https://i.pravatar.cc/150?u=1" ,about: 'i am expert in this work'),
-      ProviderModel(id: '2', name: 'Sara Khan', profession: 'Painting', rating: 4.9, pricePerHour: 30.0, imageUrl: "https://i.pravatar.cc/150?u=2", about: 'i am expert in this work'),
-      ProviderModel(id: '3', name: "Aslam Bhai", profession: "Plumbing", rating: 4.8, pricePerHour: 500, imageUrl: "https://i.pravatar.cc/150?u=3", about: 'i am expert in this work'),
-    ];
+    final List<ProviderModel> dummyProviders = [];
 
     // 2. Storage se data mangwao
     final savedProviders = await StorageService.getSavedProviders();

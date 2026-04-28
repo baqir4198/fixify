@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:handyman_app/models/provider_model.dart';
+import 'package:handyman_app/services/storage_service.dart';
+import 'edit_profile_screen.dart'; // Ensure this file exists
 
 class ProviderDashboard extends StatefulWidget {
-  const ProviderDashboard({super.key});
+  final ProviderModel provider; // Login se aane wala data
+  const ProviderDashboard({super.key, required this.provider});
 
   @override
   State<ProviderDashboard> createState() => _ProviderDashboardState();
@@ -10,9 +14,20 @@ class ProviderDashboard extends StatefulWidget {
 class _ProviderDashboardState extends State<ProviderDashboard> {
   // --- Dashboard Logic Variables ---
   bool isOnline = true;
-  double totalEarnings = 15450.0;
-  int jobsDone = 24;
-  double rating = 4.8;
+  late double totalEarnings;
+  late int jobsDone;
+  late double rating;
+  late ProviderModel currentProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    // Data initialize kar rahe hain
+    currentProvider = widget.provider;
+    totalEarnings = 15450.0; // Dummy earnings
+    jobsDone = 24;
+    rating = currentProvider.rating;
+  }
 
   // --- Dummy Data Lists ---
   List<Map<String, String>> newRequests = [
@@ -24,14 +39,14 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     {"id": "101", "name": "Sara Ali", "service": "Washing Machine Repair", "price": "1500"}
   ];
 
-  // --- 1. Accept Request ---
+  // --- Logic Functions ---
   void acceptRequest(int index) {
     setState(() {
       activeJobs.add({
         "id": DateTime.now().millisecondsSinceEpoch.toString(),
         "name": newRequests[index]['name']!,
         "service": newRequests[index]['service']!,
-        "price": newRequests[index]['price']!, // Price bhi saath le kar jao
+        "price": newRequests[index]['price']!,
       });
       newRequests.removeAt(index);
     });
@@ -40,33 +55,41 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
-  // --- 2. Reject Request ---
   void rejectRequest(int index) {
     setState(() {
       newRequests.removeAt(index);
     });
+  }
+
+  void completeJob(int index) {
+    double jobAmount = double.parse(activeJobs[index]['price'] ?? "0");
+    setState(() {
+      totalEarnings += jobAmount;
+      jobsDone += 1;
+      activeJobs.removeAt(index);
+    });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Request Rejected"), backgroundColor: Colors.red),
+      SnackBar(content: Text("Job Completed! Rs. ${jobAmount.toInt()} added."), backgroundColor: Colors.green),
     );
   }
 
-  // --- 3. Finish/Complete Job Logic ---
-  void completeJob(int index) {
-    // Job ki price nikal kar total mein add karo
-    double jobAmount = double.parse(activeJobs[index]['price'] ?? "0");
-
-    setState(() {
-      totalEarnings += jobAmount; // Paise barh gaye
-      jobsDone += 1;             // Kaam barh gaya
-      activeJobs.removeAt(index); // List se khatam
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Job Completed! Rs. ${jobAmount.toInt()} added to earnings."),
-        backgroundColor: Colors.green,
+  // --- Navigate to Edit Profile ---
+  void _goToEditProfile() async {
+    final updated = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProfileScreen(currentProvider: currentProvider),
       ),
     );
+
+    if (updated != null && updated is ProviderModel) {
+      // Database mein save karo
+      await StorageService.updateProvider(updated);
+      // UI update karo
+      setState(() {
+        currentProvider = updated;
+      });
+    }
   }
 
   @override
@@ -79,6 +102,11 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // Edit Profile Button
+          IconButton(
+            onPressed: _goToEditProfile,
+            icon: const Icon(Icons.edit_note, color: Colors.blue, size: 28),
+          ),
           Row(
             children: [
               Text(isOnline ? "Online" : "Offline",
@@ -86,9 +114,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
               Switch(
                 value: isOnline,
                 activeColor: Colors.green,
-                onChanged: (value) {
-                  setState(() => isOnline = value);
-                },
+                onChanged: (value) => setState(() => isOnline = value),
               ),
             ],
           ),
@@ -100,7 +126,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text("Welcome Back,", style: TextStyle(color: Colors.grey, fontSize: 14)),
-            const Text("Bhai Experts 👋", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            // Asli Name dikha raha hai yahan
+            Text("${currentProvider.name} 👋", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
 
             // --- Earnings Card ---
@@ -126,7 +153,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _buildMiniStat("Jobs Done", jobsDone.toString()),
-                      _buildMiniStat("Rating", "$rating ★"),
+                      _buildMiniStat("Rating", "${currentProvider.rating} ★"),
                     ],
                   )
                 ],
@@ -134,23 +161,20 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
             ),
 
             const SizedBox(height: 30),
-
-            // --- New Requests Section ---
             const Text("New Requests", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
+
             if (newRequests.isEmpty)
               const Center(child: Text("No new requests", style: TextStyle(color: Colors.grey)))
             else
               ...newRequests.asMap().entries.map((entry) {
-                int idx = entry.key;
-                var req = entry.value;
                 return _buildRequestCard(
-                  req['name']!,
-                  req['service']!,
-                  req['time']!,
-                  req['price']!,
-                  onAccept: () => acceptRequest(idx),
-                  onReject: () => rejectRequest(idx),
+                  entry.value['name']!,
+                  entry.value['service']!,
+                  entry.value['time']!,
+                  entry.value['price']!,
+                  onAccept: () => acceptRequest(entry.key),
+                  onReject: () => rejectRequest(entry.key),
                 );
               }).toList(),
 
@@ -158,14 +182,11 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
             const Text("Active Jobs", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
 
-            // --- Active Jobs List ---
             if (activeJobs.isEmpty)
               const Center(child: Text("No active jobs", style: TextStyle(color: Colors.grey)))
             else
               ...activeJobs.asMap().entries.map((entry) {
-                int idx = entry.key;
-                var job = entry.value;
-                return _buildActiveJobCard(job['name']!, job['service']!, idx);
+                return _buildActiveJobCard(entry.value['name']!, entry.value['service']!, entry.key);
               }).toList(),
 
             const SizedBox(height: 50),
@@ -175,6 +196,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
+  // --- UI Components remain same but now use currentProvider ---
   Widget _buildMiniStat(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
