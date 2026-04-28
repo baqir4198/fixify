@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:handyman_app/screens/login_screen.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
 
 void main() {
@@ -15,7 +16,7 @@ class HandyManApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'HandyMan App',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: MainWrapper(),
+      home: const LoginScreen(),
     );
   }
 }

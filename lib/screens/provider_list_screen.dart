@@ -13,10 +13,10 @@ class ProviderListScreen extends StatefulWidget {
 }
 
 class _ProviderListScreenState extends State<ProviderListScreen> {
-  List<ProviderModel> allProviders = []; // Asli data
-  List<ProviderModel> displayedProviders = []; // Filtered/Search data
+  List<ProviderModel> allProviders = [];
+  List<ProviderModel> displayedProviders = [];
   bool isLoading = true;
-  String activeSort = ""; // Konsa filter active hai?
+  String activeSort = "";
 
   @override
   void initState() {
@@ -25,24 +25,35 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   }
 
   Future<void> _loadAllProviders() async {
+    // 1. Dummy Data
     final List<ProviderModel> dummyProviders = [
-      ProviderModel(id: '1', name: 'Ali Ahmad', profession: 'Carpentry', rating: 4.8, pricePerHour: 25.0, imageUrl: "https://i.pravatar.cc/150?u=1"),
-      ProviderModel(id: '2', name: 'Sara Khan', profession: 'Painting', rating: 4.9, pricePerHour: 30.0, imageUrl: "https://i.pravatar.cc/150?u=2"),
-      ProviderModel(id: '3', name: "Aslam Bhai", profession: "Plumbing", rating: 4.8, pricePerHour: 500, imageUrl: "https://i.pravatar.cc/150?u=3"),
+      ProviderModel(id: '1', name: 'Ali Ahmad', profession: 'Carpentry', rating: 4.8, pricePerHour: 25.0, imageUrl: "https://i.pravatar.cc/150?u=1" ,about: 'i am expert in this work'),
+      ProviderModel(id: '2', name: 'Sara Khan', profession: 'Painting', rating: 4.9, pricePerHour: 30.0, imageUrl: "https://i.pravatar.cc/150?u=2", about: 'i am expert in this work'),
+      ProviderModel(id: '3', name: "Aslam Bhai", profession: "Plumbing", rating: 4.8, pricePerHour: 500, imageUrl: "https://i.pravatar.cc/150?u=3", about: 'i am expert in this work'),
     ];
 
+    // 2. Storage se data mangwao
     final savedProviders = await StorageService.getSavedProviders();
-    final combined = [...dummyProviders, ...savedProviders];
+
+    // 3. Naye providers ko pehle rakha hai taake foran nazar aayein
+    final combined = [...savedProviders, ...dummyProviders];
 
     setState(() {
-      // Sirf relevant category waly providers uthao
-      allProviders = combined.where((p) => p.profession == widget.categoryName).toList();
+      // --- SMART FILTER LOGIC UPDATE ---
+      // Hum check kar rahe hain ke profession aur category aapas mein milti julti hain ya nahi
+      allProviders = combined.where((p) {
+        String category = widget.categoryName.toLowerCase(); // Maslan: "electrical"
+        String prof = p.profession.toLowerCase();           // Maslan: "electrician"
+
+        // Exact match ho ya dono aik doosre ke hissay hon
+        return prof.contains(category) || category.contains(prof);
+      }).toList();
+
       displayedProviders = allProviders;
       isLoading = false;
     });
   }
 
-  // --- Search Logic ---
   void _runFilter(String enteredKeyword) {
     List<ProviderModel> results = [];
     if (enteredKeyword.isEmpty) {
@@ -57,7 +68,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     });
   }
 
-  // --- Sorting Logic ---
   void _sortProviders(String criteria) {
     setState(() {
       activeSort = criteria;
@@ -79,12 +89,10 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
-        // Bottom section mein Search aur Filters add kiye hain
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(120),
           child: Column(
             children: [
-              // Search Bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: TextField(
@@ -102,7 +110,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                   ),
                 ),
               ),
-              // Filter Chips
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: SingleChildScrollView(
@@ -153,7 +160,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
-  // --- Baqi UI (Card & Empty State) same wahi jo ap ne di thi ---
   Widget _buildModernProviderCard(BuildContext context, ProviderModel provider) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -184,9 +190,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                 tag: 'provider-${provider.id}',
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
-                  child: provider.imageUrl.startsWith('http')
-                      ? Image.network(provider.imageUrl, width: 85, height: 85, fit: BoxFit.cover)
-                      : Image.file(File(provider.imageUrl), width: 85, height: 85, fit: BoxFit.cover),
+                  child: _buildImage(provider.imageUrl),
                 ),
               ),
               const SizedBox(width: 16),
@@ -216,7 +220,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
               ),
               Column(
                 children: [
-                  Text("\$${provider.pricePerHour.toInt()}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  Text("Rs. ${provider.pricePerHour.toInt()}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const Text("/hr", style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
@@ -227,6 +231,17 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
+  // Helper function to handle both URL and File images safely
+  Widget _buildImage(String url) {
+    if (url.startsWith('http')) {
+      return Image.network(url, width: 85, height: 85, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person)));
+    } else {
+      return Image.file(File(url), width: 85, height: 85, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person)));
+    }
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -235,6 +250,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
           Icon(Icons.person_search_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text("No results found for ${widget.categoryName}", style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
+          const Text("Try checking other categories!", style: TextStyle(color: Colors.grey, fontSize: 12)),
         ],
       ),
     );

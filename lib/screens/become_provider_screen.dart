@@ -29,7 +29,7 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
         profession: _selectedCategory,
         rating: 4.5, // New providers start with a default rating
         pricePerHour: double.parse(_priceController.text),
-        imageUrl: 'https://i.pravatar.cc/150?u=${_nameController.text}', // Random avatar for now
+        imageUrl: 'https://i.pravatar.cc/150?u=${_nameController.text}', about: '', // Random avatar for now
       );
 
       // 2. Storage mein save karein

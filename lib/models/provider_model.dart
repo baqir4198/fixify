@@ -5,6 +5,7 @@ class ProviderModel {
   double rating;
   final double pricePerHour;
   final String imageUrl;
+  final String about;
 
   ProviderModel({
     required this.id,
@@ -12,7 +13,7 @@ class ProviderModel {
     required this.profession,
     required this.rating,
     required this.pricePerHour,
-    required this.imageUrl,
+    required this.imageUrl, required this.about,
   });
 
   factory ProviderModel.fromMap(Map<String, dynamic> map) {
@@ -26,7 +27,7 @@ class ProviderModel {
       rating: (map['rating'] ?? 0.0).toDouble(),
       pricePerHour: (map['pricePerHour'] ?? 0.0).toDouble(),
 
-      imageUrl: map['imageUrl']?.toString() ?? 'https://i.pravatar.cc/150',
+      imageUrl: map['imageUrl']?.toString() ?? 'https://i.pravatar.cc/150', about: '',
     );
   }
 
