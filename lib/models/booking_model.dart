@@ -3,16 +3,24 @@ import 'package:handyman_app/models/provider_model.dart';
 
 class BookingModel {
   final String id;
-  final ProviderModel provider;
+  final ProviderModel provider; // Kis ko book kiya
+  final String customerName;    // Kis ne book kiya (Name display ke liye)
+  final String customerId;      // Customer ki unique ID
   final DateTime date;
   final String time;
+  final String serviceName;     // Kaam kya hai (e.g., AC Repair)
+  final String price;           // Kitne paise taiy huay
   String status;
 
   BookingModel({
     required this.id,
     required this.provider,
+    required this.customerName,
+    required this.customerId,
     required this.date,
     required this.time,
+    required this.serviceName,
+    required this.price,
     this.status = 'Pending',
   });
 
@@ -20,8 +28,12 @@ class BookingModel {
     return {
       'id': id,
       'provider': provider.toMap(),
-      'date': date.toIso8601String(), // 'data' ko 'date' kar dia hai
+      'customerName': customerName,
+      'customerId': customerId,
+      'date': date.toIso8601String(),
       'time': time,
+      'serviceName': serviceName,
+      'price': price,
       'status': status,
     };
   }
@@ -29,19 +41,17 @@ class BookingModel {
   factory BookingModel.fromMap(Map<String, dynamic> map) {
     return BookingModel(
       id: map['id']?.toString() ?? '',
-      // Provider check: agar provider map null ho to empty map bhej rahay hain
       provider: ProviderModel.fromMap(map['provider'] ?? {}),
-      // Date check: agar date missing ho to aaj ki date set ho jaye
-      date: map['date'] != null
-          ? DateTime.parse(map['date'])
-          : DateTime.now(),
+      customerName: map['customerName'] ?? 'Unknown Customer',
+      customerId: map['customerId'] ?? '',
+      date: map['date'] != null ? DateTime.parse(map['date']) : DateTime.now(),
       time: map['time']?.toString() ?? '00:00',
+      serviceName: map['serviceName'] ?? 'General Service',
+      price: map['price']?.toString() ?? '0',
       status: map['status']?.toString() ?? 'Pending',
     );
   }
 
-  factory BookingModel.fromJson(String source) =>
-      BookingModel.fromMap(json.decode(source));
-
+  factory BookingModel.fromJson(String source) => BookingModel.fromMap(json.decode(source));
   String toJson() => json.encode(toMap());
 }

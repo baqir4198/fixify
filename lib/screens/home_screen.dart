@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:handyman_app/screens/provider_list_screen.dart';
 import 'package:handyman_app/widgets/category_card.dart';
+import 'package:handyman_app/services/storage_service.dart'; // Storage Service add kiya
 import '../models/service_model.dart';
 
-class HomeScreen extends StatelessWidget {
-  HomeScreen({super.key});
+class HomeScreen extends StatefulWidget { // Ise StatefulWidget kar diya taake naam load ho sakay
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String userName = "User";
 
   final List<ServiceModel> categories = [
     ServiceModel(id: '1', name: 'Plumbing', icon: Icons.plumbing, color: Colors.blue),
@@ -16,12 +24,28 @@ class HomeScreen extends StatelessWidget {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadName();
+  }
+
+  // --- Login user ka naam load karne ke liye ---
+  Future<void> _loadName() async {
+    final users = await StorageService.getSavedProviders();
+    if (users.isNotEmpty) {
+      setState(() {
+        // Last register/login user ka naam uthaya
+        userName = users.last.name.split(' ')[0]; // Sirf First Name dikhane ke liye
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Professional light grey background
+      backgroundColor: const Color(0xFFF8F9FA),
       body: CustomScrollView(
         slivers: [
-          // 1. Stylish Top Bar
           SliverAppBar(
             floating: true,
             pinned: true,
@@ -44,16 +68,15 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
 
-          // 2. Search and Welcome Section
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Hello, User! 👋",
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  Text(
+                    "Hello, $userName! 👋", // Ab asli naam ayega
+                    style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -62,7 +85,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 25),
 
-                  // Modern Search Bar
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15),
                     decoration: BoxDecoration(
@@ -86,7 +108,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 25),
 
-                  // Promotional Banner
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -130,7 +151,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
 
-          // 3. Grid of Categories
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverGrid(
@@ -146,6 +166,7 @@ class HomeScreen extends StatelessWidget {
                   return CategoryCard(
                     service: service,
                     onTap: () {
+                      // Yahan se hum category name bhej rahe hain
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -160,7 +181,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
 
-          // Extra bottom space
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),

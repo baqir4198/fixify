@@ -18,12 +18,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
-  String userRole = "Customer";
-
+  String userRole = "Customer"; // Default Role
   String selectedCategory = "Cleaning";
   final List<String> categories = ["Cleaning", "Plumbing", "Electrician", "Painter", "Carpenter", "AC Repair"];
 
   void _handleSignUp() async {
+    // Basic Validation
     if (_nameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields!")));
       return;
@@ -34,65 +34,57 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    setState(() {}); // Loading state logic yahan add kar sakte hain
+    // Role ke hisab se data prepare karna
+    final newUser = ProviderModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+      // AGAR Provider hai toh selected category, warna "Customer" label
+      profession: userRole == "Provider" ? selectedCategory : "Customer",
+      // AGAR Provider hai toh rate, warna 0.0
+      pricePerHour: userRole == "Provider" ? (double.tryParse(_costController.text) ?? 0.0) : 0.0,
+      rating: userRole == "Provider" ? 5.0 : 0.0,
+      imageUrl: "", // Profile screen se update hogi
+      about: userRole == "Provider" ? "Professional $selectedCategory service provider." : "Customer Account",
+    );
 
+    // Common Storage (Abhi hum saare users aik hi list mein rakh rahe hain)
+    await StorageService.saveProvider(newUser);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Account Created Successfully!"), backgroundColor: Colors.green),
+    );
+
+    // Navigation based on Role
     if (userRole == "Provider") {
-      final newProvider = ProviderModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text,
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        profession: selectedCategory,
-        pricePerHour: double.tryParse(_costController.text) ?? 0.0,
-        rating: 5.0,
-        imageUrl: "https://i.pravatar.cc/150",
-        about: "Expert $selectedCategory service provider.",
-      );
-
-      await StorageService.saveProvider(newProvider);
-
-      if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => ProviderDashboard(provider: newProvider)),
+        MaterialPageRoute(builder: (context) => ProviderDashboard(provider: newUser)),
             (route) => false,
       );
     } else {
-      // CUSTOMER SIGNUP LOGIC:
-      // Hum Customer ko bhi ProviderModel mein save kar rahe hain ya alag se handle kar sakte hain.
-      // Filhaal easy rakhne ke liye hum Storage mein mark kar rahe hain ke ye Customer hai.
-
-      final newCustomer = ProviderModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text,
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        profession: "Customer", // Role identify karne ke liye
-        pricePerHour: 0.0,
-        rating: 0.0,
-        imageUrl: "https://i.pravatar.cc/150",
-        about: "Handyman App User",
-      );
-
-      await StorageService.saveProvider(newCustomer);
-
-      if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const MainWrapper()),
             (route) => false,
       );
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account Created Successfully!")));
   }
 
   @override
   Widget build(BuildContext context) {
     bool isProvider = userRole == "Provider";
+
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, leading: const BackButton(color: Colors.black)),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: const BackButton(color: Colors.black),
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 25),
@@ -100,29 +92,64 @@ class _SignUpScreenState extends State<SignUpScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28)),
+              const SizedBox(height: 10),
+              const Text("Join us to find or provide services", style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 30),
+
+              // Role Selection
               Row(children: [
                 _buildRoleOption("Customer", Icons.person),
                 const SizedBox(width: 15),
                 _buildRoleOption("Provider", Icons.handyman),
               ]),
               const SizedBox(height: 25),
+
+              // Common Fields
               _buildTextField(_nameController, "Full Name", Icons.person_outline),
               const SizedBox(height: 15),
               _buildTextField(_emailController, "Email Address", Icons.email_outlined),
+              const SizedBox(height: 15),
+
+              // AGAR Provider hai toh ye extra fields dikhao
               if (isProvider) ...[
+                const Text("Select Expertise", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedCategory,
+                      isExpanded: true,
+                      items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (v) => setState(() => selectedCategory = v!),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 15),
                 _buildTextField(_costController, "Hourly Rate (Rs.)", Icons.payments_outlined, isNumber: true),
+                const SizedBox(height: 15),
               ],
-              const SizedBox(height: 15),
+
               _buildTextField(_passwordController, "Password", Icons.lock_outline, isObscure: true),
               const SizedBox(height: 15),
               _buildTextField(_confirmPasswordController, "Confirm Password", Icons.lock_reset_outlined, isObscure: true),
-              const SizedBox(height: 30),
+              const SizedBox(height: 35),
+
+              // Sign Up Button
               SizedBox(
-                width: double.infinity, height: 55,
+                width: double.infinity,
+                height: 55,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    elevation: 0,
+                  ),
                   onPressed: _handleSignUp,
                   child: const Text("Sign Up", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
@@ -143,9 +170,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 15),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.blue[50] : Colors.grey[100],
+            color: isSelected ? Colors.blue[50] : Colors.grey[50],
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: isSelected ? Colors.blue : Colors.transparent),
+            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade200),
           ),
           child: Column(children: [
             Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
@@ -159,9 +186,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Widget _buildTextField(TextEditingController controller, String hint, IconData icon, {bool isObscure = false, bool isNumber = false}) {
     return TextField(
-      controller: controller, obscureText: isObscure,
+      controller: controller,
+      obscureText: isObscure,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(prefixIcon: Icon(icon), hintText: hint, filled: true, fillColor: Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none)),
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon),
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.grey[50],
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey.shade200)),
+      ),
     );
   }
 }

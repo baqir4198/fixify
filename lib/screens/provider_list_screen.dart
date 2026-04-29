@@ -24,25 +24,31 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     _loadAllProviders();
   }
 
+  // --- STRICTLY UPDATED LOGIC FOR REAL DATA ---
   Future<void> _loadAllProviders() async {
-    // 1. Dummy Data
-    final List<ProviderModel> dummyProviders = [];
+    setState(() => isLoading = true);
 
-    // 2. Storage se data mangwao
-    final savedProviders = await StorageService.getSavedProviders();
-
-    // 3. Naye providers ko pehle rakha hai taake foran nazar aayein
-    final combined = [...savedProviders, ...dummyProviders];
+    // 1. Storage se saare users mangwao
+    final savedUsers = await StorageService.getSavedProviders();
 
     setState(() {
-      // --- SMART FILTER LOGIC UPDATE ---
-      // Hum check kar rahe hain ke profession aur category aapas mein milti julti hain ya nahi
-      allProviders = combined.where((p) {
-        String category = widget.categoryName.toLowerCase(); // Maslan: "electrical"
-        String prof = p.profession.toLowerCase();           // Maslan: "electrician"
+      // 2. Filter Logic: Taake sirf sahi profession wale Providers nazar aayein
+      allProviders = savedUsers.where((p) {
+        // Customer ko filter out karein
+        if (p.profession == "Customer") return false;
 
-        // Exact match ho ya dono aik doosre ke hissay hon
-        return prof.contains(category) || category.contains(prof);
+        String category = widget.categoryName.toLowerCase().trim();
+        String prof = p.profession.toLowerCase().trim();
+
+        // Flexible match: "Plumber" vs "Plumbing" ya "Electrical" vs "Electrician"
+        bool match = prof.contains(category) || category.contains(prof);
+
+        // Agar exact match na ho toh pehle 4 letters match karein (e.g. "Elec")
+        if (!match && prof.length >= 4 && category.length >= 4) {
+          match = prof.substring(0, 4) == category.substring(0, 4);
+        }
+
+        return match;
       }).toList();
 
       displayedProviders = allProviders;
@@ -227,11 +233,13 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
-  // Helper function to handle both URL and File images safely
   Widget _buildImage(String url) {
-    if (url.startsWith('http')) {
-      return Image.network(url, width: 85, height: 85, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person)));
+    if (url.startsWith('http') || url.isEmpty) {
+      return Image.network(
+          url.isEmpty ? "https://i.pravatar.cc/150" : url,
+          width: 85, height: 85, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person))
+      );
     } else {
       return Image.file(File(url), width: 85, height: 85, fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person)));

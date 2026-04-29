@@ -22,20 +22,14 @@ class StorageService {
     return providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
   }
 
-  // --- NAYA FUNCTION: Profile Update karne ke liye ---
   static Future<void> updateProvider(ProviderModel updatedProvider) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> providerRaw = prefs.getStringList(_providerKey) ?? [];
-
     List<ProviderModel> providers = providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
 
-    // ID match karke index dhoondo
     int index = providers.indexWhere((p) => p.id == updatedProvider.id);
-
     if (index != -1) {
-      providers[index] = updatedProvider; // Purana data replace kar do
-
-      // Wapis String list bana kar save karo
+      providers[index] = updatedProvider;
       List<String> updatedRaw = providers.map((p) => jsonEncode(p.toMap())).toList();
       await prefs.setStringList(_providerKey, updatedRaw);
     }
@@ -50,22 +44,37 @@ class StorageService {
     await prefs.setStringList(_bookingKey, bookings);
   }
 
+  // --- GENERIC GETTER: Jo screen mang rahi hai ---
   static Future<List<BookingModel>> getBookings() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
+    return bookingsRaw.map((item) => BookingModel.fromMap(jsonDecode(item))).toList();
+  }
 
-    return bookingsRaw.map((item) {
-      return BookingModel.fromMap(jsonDecode(item));
-    }).toList();
+  // Provider specific (Dashboard ke liye useful hai)
+  static Future<List<BookingModel>> getBookingsForProvider(String providerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
+    return bookingsRaw
+        .map((item) => BookingModel.fromMap(jsonDecode(item)))
+        .where((booking) => booking.provider.id == providerId)
+        .toList();
+  }
+
+  // Customer specific (Future use ke liye)
+  static Future<List<BookingModel>> getBookingsForCustomer(String customerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
+    return bookingsRaw
+        .map((item) => BookingModel.fromMap(jsonDecode(item)))
+        .where((booking) => booking.customerId == customerId)
+        .toList();
   }
 
   static Future<void> updateBookingStatus(String id, String newStatus) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
-
-    List<BookingModel> bookings = bookingsRaw.map((item) {
-      return BookingModel.fromMap(jsonDecode(item));
-    }).toList();
+    List<BookingModel> bookings = bookingsRaw.map((item) => BookingModel.fromMap(jsonDecode(item))).toList();
 
     int index = bookings.indexWhere((b) => b.id == id);
     if (index != -1) {
@@ -78,19 +87,16 @@ class StorageService {
   static Future<void> deleteBooking(String id) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> bookingsRaw = prefs.getStringList(_bookingKey) ?? [];
-
     bookingsRaw.removeWhere((item) {
       Map<String, dynamic> data = jsonDecode(item);
       return data['id'].toString() == id;
     });
-
     await prefs.setStringList(_bookingKey, bookingsRaw);
   }
 
   static Future<void> updateProviderRating(String providerId, double newRating) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> providerRaw = prefs.getStringList(_providerKey) ?? [];
-
     List<ProviderModel> providers = providerRaw.map((p) => ProviderModel.fromMap(jsonDecode(p))).toList();
 
     int index = providers.indexWhere((p) => p.id == providerId);

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:handyman_app/models/provider_model.dart';
+import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
-import 'edit_profile_screen.dart'; // Ensure this file exists
+import 'edit_profile_screen.dart';
 
 class ProviderDashboard extends StatefulWidget {
-  final ProviderModel provider; // Login se aane wala data
+  final ProviderModel provider;
   const ProviderDashboard({super.key, required this.provider});
 
   @override
@@ -12,241 +13,241 @@ class ProviderDashboard extends StatefulWidget {
 }
 
 class _ProviderDashboardState extends State<ProviderDashboard> {
-  // --- Dashboard Logic Variables ---
+  // Toggle State
   bool isOnline = true;
-  late double totalEarnings;
-  late int jobsDone;
-  late double rating;
+
+  double totalEarnings = 0.0;
+  int jobsDone = 0;
   late ProviderModel currentProvider;
+
+  List<BookingModel> newRequests = [];
+  List<BookingModel> activeJobs = [];
 
   @override
   void initState() {
     super.initState();
-    // Data initialize kar rahe hain
     currentProvider = widget.provider;
-    totalEarnings = 15450.0; // Dummy earnings
-    jobsDone = 24;
-    rating = currentProvider.rating;
+    _loadRealRequests();
   }
 
-  // --- Dummy Data Lists ---
-  List<Map<String, String>> newRequests = [
-    {"id": "1", "name": "Hamza Ahmad", "service": "Plumbing Leakage", "time": "10:30 AM", "price": "1200"},
-    {"id": "2", "name": "Ali Khan", "service": "Pipe Repair", "time": "02:00 PM", "price": "800"},
-  ];
-
-  List<Map<String, String>> activeJobs = [
-    {"id": "101", "name": "Sara Ali", "service": "Washing Machine Repair", "price": "1500"}
-  ];
-
-  // --- Logic Functions ---
-  void acceptRequest(int index) {
+  // Real Data Load karne ka function
+  Future<void> _loadRealRequests() async {
+    final allBookings = await StorageService.getBookingsForProvider(currentProvider.id);
     setState(() {
-      activeJobs.add({
-        "id": DateTime.now().millisecondsSinceEpoch.toString(),
-        "name": newRequests[index]['name']!,
-        "service": newRequests[index]['service']!,
-        "price": newRequests[index]['price']!,
-      });
-      newRequests.removeAt(index);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Job Accepted! Added to Active Jobs."), backgroundColor: Colors.blue),
-    );
-  }
-
-  void rejectRequest(int index) {
-    setState(() {
-      newRequests.removeAt(index);
+      newRequests = allBookings.where((b) => b.status == 'Pending').toList();
+      activeJobs = allBookings.where((b) => b.status == 'Accepted').toList();
+      final completed = allBookings.where((b) => b.status == 'Completed').toList();
+      jobsDone = completed.length;
+      totalEarnings = completed.fold(0, (sum, item) => sum + (double.tryParse(item.price) ?? 0));
     });
   }
 
-  void completeJob(int index) {
-    double jobAmount = double.parse(activeJobs[index]['price'] ?? "0");
-    setState(() {
-      totalEarnings += jobAmount;
-      jobsDone += 1;
-      activeJobs.removeAt(index);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Job Completed! Rs. ${jobAmount.toInt()} added."), backgroundColor: Colors.green),
-    );
-  }
-
-  // --- Navigate to Edit Profile ---
   void _goToEditProfile() async {
     final updated = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => EditProfileScreen(currentProvider: currentProvider),
-      ),
+      MaterialPageRoute(builder: (context) => EditProfileScreen(user: currentProvider)),
     );
-
-    if (updated != null && updated is ProviderModel) {
-      // Database mein save karo
-      await StorageService.updateProvider(updated);
-      // UI update karo
+    if (updated == true) {
+      final allUsers = await StorageService.getSavedProviders();
       setState(() {
-        currentProvider = updated;
+        currentProvider = allUsers.firstWhere((u) => u.id == currentProvider.id);
       });
+      await _loadRealRequests();
     }
+  }
+
+  // --- Logic Functions ---
+  void acceptRequest(BookingModel booking) async {
+    await StorageService.updateBookingStatus(booking.id, 'Accepted');
+    _showSnackBar("Job Accepted!", Colors.blue);
+    _loadRealRequests();
+  }
+
+  void completeJob(BookingModel booking) async {
+    await StorageService.updateBookingStatus(booking.id, 'Completed');
+    _showSnackBar("Job Completed! Earnings updated.", Colors.green);
+    _loadRealRequests();
+  }
+
+  void declineRequest(BookingModel booking) async {
+    await StorageService.deleteBooking(booking.id);
+    _showSnackBar("Request Declined.", Colors.red);
+    _loadRealRequests();
+  }
+
+  void _showSnackBar(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: const Color(0xFFF4F7FA),
       appBar: AppBar(
-        title: const Text("Provider Dashboard",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text("Dashboard", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Edit Profile Button
+          // Edit Profile Icon
           IconButton(
-            onPressed: _goToEditProfile,
-            icon: const Icon(Icons.edit_note, color: Colors.blue, size: 28),
+              onPressed: _goToEditProfile,
+              icon: const Icon(Icons.edit_note_rounded, color: Colors.blue, size: 28)
           ),
+
+          // --- REAL ONLINE/OFFLINE TOGGLE WITH TEXT ---
           Row(
             children: [
-              Text(isOnline ? "Online" : "Offline",
-                  style: TextStyle(color: isOnline ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(
+                isOnline ? "Online" : "Offline",
+                style: TextStyle(
+                  color: isOnline ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
               Switch(
                 value: isOnline,
                 activeColor: Colors.green,
-                onChanged: (value) => setState(() => isOnline = value),
+                onChanged: (v) => setState(() => isOnline = v),
               ),
             ],
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Welcome Back,", style: TextStyle(color: Colors.grey, fontSize: 14)),
-            // Asli Name dikha raha hai yahan
-            Text("${currentProvider.name} 👋", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
+      body: RefreshIndicator(
+        onRefresh: _loadRealRequests,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Hi, ${currentProvider.name} 👋", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("Manage your services and bookings.", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 25),
 
-            // --- Earnings Card ---
-            Container(
-              padding: const EdgeInsets.all(25),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isOnline
-                      ? [Colors.blue[900]!, Colors.blue[600]!]
-                      : [Colors.grey[800]!, Colors.grey[600]!],
-                ),
-                borderRadius: BorderRadius.circular(25),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              _buildEarningsCard(),
+              const SizedBox(height: 25),
+
+              // Stats Row
+              Row(
                 children: [
-                  const Text("Total Earnings", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                  const SizedBox(height: 10),
-                  Text("Rs. ${totalEarnings.toStringAsFixed(0)}",
-                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildMiniStat("Jobs Done", jobsDone.toString()),
-                      _buildMiniStat("Rating", "${currentProvider.rating} ★"),
-                    ],
-                  )
+                  _buildSmallStatCard("Pending", "${newRequests.length}", Icons.pending_actions, Colors.orange),
+                  const SizedBox(width: 15),
+                  _buildSmallStatCard("Active", "${activeJobs.length}", Icons.directions_run, Colors.green),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 30),
-            const Text("New Requests", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
+              const SizedBox(height: 30),
+              _sectionHeader("New Requests"),
+              if (newRequests.isEmpty) _emptyState("No new requests found")
+              else ...newRequests.map((b) => _buildRequestCard(b)),
 
-            if (newRequests.isEmpty)
-              const Center(child: Text("No new requests", style: TextStyle(color: Colors.grey)))
-            else
-              ...newRequests.asMap().entries.map((entry) {
-                return _buildRequestCard(
-                  entry.value['name']!,
-                  entry.value['service']!,
-                  entry.value['time']!,
-                  entry.value['price']!,
-                  onAccept: () => acceptRequest(entry.key),
-                  onReject: () => rejectRequest(entry.key),
-                );
-              }).toList(),
+              const SizedBox(height: 30),
+              _sectionHeader("Active Work"),
+              if (activeJobs.isEmpty) _emptyState("No active jobs right now")
+              else ...activeJobs.map((b) => _buildActiveJobCard(b)),
 
-            const SizedBox(height: 30),
-            const Text("Active Jobs", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-
-            if (activeJobs.isEmpty)
-              const Center(child: Text("No active jobs", style: TextStyle(color: Colors.grey)))
-            else
-              ...activeJobs.asMap().entries.map((entry) {
-                return _buildActiveJobCard(entry.value['name']!, entry.value['service']!, entry.key);
-              }).toList(),
-
-            const SizedBox(height: 50),
-          ],
+              const SizedBox(height: 30),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // --- UI Components remain same but now use currentProvider ---
-  Widget _buildMiniStat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-      ],
+  // --- UI Build Components ---
+
+  Widget _buildEarningsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isOnline
+              ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
+              : [Colors.grey[800]!, Colors.grey[600]!], // Offline hone pe Grey
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+              color: isOnline ? Colors.blue.withOpacity(0.3) : Colors.black12,
+              blurRadius: 20,
+              offset: const Offset(0, 10)
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Total Earnings", style: TextStyle(color: Colors.white70, fontSize: 16)),
+          const SizedBox(height: 5),
+          Text("Rs. ${totalEarnings.toInt()}", style: const TextStyle(color: Colors.white, fontSize: 35, fontWeight: FontWeight.bold)),
+          const Divider(color: Colors.white24, height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _miniStat("Jobs Done", "$jobsDone"),
+              _miniStat("Rating", "${currentProvider.rating} ★"),
+              _miniStat("Rate/hr", "Rs.${currentProvider.pricePerHour.toInt()}"),
+            ],
+          )
+        ],
+      ),
     );
   }
 
-  Widget _buildRequestCard(String name, String service, String time, String price, {required VoidCallback onAccept, required VoidCallback onReject}) {
+  Widget _buildRequestCard(BookingModel booking) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(radius: 25, backgroundColor: Colors.blue, child: Icon(Icons.person, color: Colors.white)),
+              const CircleAvatar(radius: 25, backgroundColor: Color(0xFFE3F2FD), child: Icon(Icons.person, color: Colors.blue)),
               const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(service, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  ],
-                ),
-              ),
-              Text("Rs. $price", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(booking.serviceName, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              ])),
+              Text("Rs.${booking.price}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
             ],
           ),
-          const Divider(height: 20),
+          const SizedBox(height: 15),
           Row(
             children: [
-              const Icon(Icons.access_time, size: 16, color: Colors.grey),
-              const SizedBox(width: 5),
-              Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              const Spacer(),
-              TextButton(onPressed: onReject, child: const Text("Reject", style: TextStyle(color: Colors.red))),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: onAccept,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                child: const Text("Accept", style: TextStyle(color: Colors.white)),
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: () => declineRequest(booking),
+                      style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.red),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12)
+                      ),
+                      child: const Text("Decline", style: TextStyle(color: Colors.red))
+                  )
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                  child: ElevatedButton(
+                      onPressed: () => acceptRequest(booking),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12)
+                      ),
+                      child: const Text("Accept", style: TextStyle(color: Colors.white))
+                  )
               ),
             ],
           )
@@ -255,44 +256,72 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
-  Widget _buildActiveJobCard(String name, String service, int index) {
+  Widget _buildActiveJobCard(BookingModel booking) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.green.withOpacity(0.2)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.green.withOpacity(0.1))
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.directions_run, color: Colors.green),
-          ),
+          const CircleAvatar(backgroundColor: Color(0xFFE8F5E9), child: Icon(Icons.bolt, color: Colors.green)),
           const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(service, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
-          ),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(booking.serviceName, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ])),
           ElevatedButton(
-            onPressed: () => completeJob(index),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text("Finish", style: TextStyle(fontSize: 12)),
+              onPressed: () => completeJob(booking),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+              ),
+              child: const Text("Finish", style: TextStyle(color: Colors.white))
           ),
         ],
       ),
     );
   }
+
+  Widget _buildSmallStatCard(String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 5)]
+        ),
+        child: Row(children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ])
+        ]),
+      ),
+    );
+  }
+
+  Widget _miniStat(String label, String value) => Column(children: [
+    Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+    Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+  ]);
+
+  Widget _sectionHeader(String title) => Padding(
+      padding: const EdgeInsets.only(bottom: 15, left: 5),
+      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))
+  );
+
+  Widget _emptyState(String msg) => Center(
+      child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Text(msg, style: const TextStyle(color: Colors.grey, fontSize: 15))
+      )
+  );
 }

@@ -29,31 +29,45 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Storage se saare users (Providers + Customers) uthaye
+    // Storage se saare users uthaye
     List<ProviderModel> allUsers = await StorageService.getSavedProviders();
 
     try {
-      // Matching user dhoondhein
-      ProviderModel matchingUser = allUsers.firstWhere(
+      // 1. Email aur Password se user dhoondo
+      final matchingUser = allUsers.firstWhere(
             (u) => u.email == emailInput && u.password == passwordInput,
       );
 
       if (!mounted) return;
 
+      // 2. ROLE VERIFICATION LOGIC (NEW & FIXED)
+
+      // Check A: Agar selected role Customer hai lekin user Provider nikla
+      if (userRole == "Customer" && matchingUser.profession != "Customer") {
+        throw "This email is registered as a Provider. Please login as Provider.";
+      }
+
+      // Check B: Agar selected role Provider hai lekin user Customer nikla
+      if (userRole == "Provider" && matchingUser.profession == "Customer") {
+        throw "This email is registered as a Customer. Please login as Customer.";
+      }
+
+      // 3. Agar sab theek hai toh relevant screen par bhejein
       if (userRole == "Provider") {
-        // Check karein ke kya ye waqayi provider hai
-        if (matchingUser.profession == "Customer") {
-          throw Exception("This is a Customer account");
-        }
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ProviderDashboard(provider: matchingUser)));
       } else {
-        // Customer side
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainWrapper()));
       }
+
     } catch (e) {
       if (!mounted) return;
+
+      // Error message dikhayen (Check karein ke Exception hai ya custom string)
+      String errorMsg = e.toString().replaceAll("Exception: ", "");
+      if (e is StateError) errorMsg = "Invalid Email or Password!";
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().contains("Customer") ? "This email is registered as Customer!" : "Invalid Credentials!"), backgroundColor: Colors.red),
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
       );
     }
 
@@ -73,6 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 80),
               const Text("Welcome Back", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
               const SizedBox(height: 40),
+              // Role Selector UI
               Container(
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(15)),

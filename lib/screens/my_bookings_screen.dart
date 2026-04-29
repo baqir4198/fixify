@@ -12,17 +12,18 @@ class MyBookingsScreen extends StatefulWidget {
 }
 
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
+
   Future<void> _refreshBookings() async {
     setState(() {});
   }
 
-  // --- NEW: Rating Dialog Function ---
+  // --- Rating Dialog Function ---
   void _showRatingDialog(BuildContext context, BookingModel booking) {
-    double selectedRating = 5.0; // Default stars
+    double selectedRating = 5.0;
 
     showDialog(
       context: context,
-      barrierDismissible: false, // User ko submit ya skip karna hi parega
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Rate Service", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
@@ -33,7 +34,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             Text(booking.provider.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
             const SizedBox(height: 20),
 
-            // Star Selection Logic
             StatefulBuilder(
               builder: (context, setDialogState) => Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -66,14 +66,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
-              // 1. Update Booking Status
+              // Status update to Completed
               await StorageService.updateBookingStatus(booking.id, 'Completed');
-              // 2. Update Provider's Rating in Storage
+              // Update Provider's overall rating
               await StorageService.updateProviderRating(booking.provider.id, selectedRating);
 
               if (!mounted) return;
               Navigator.pop(context);
-              _refreshBookings(); // Refresh UI
+              _refreshBookings();
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("Thanks for your feedback!"), backgroundColor: Colors.green),
@@ -99,6 +99,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       body: RefreshIndicator(
         onRefresh: _refreshBookings,
         child: FutureBuilder<List<BookingModel>>(
+          // FIX: Generic getter use kar rahe hain
           future: StorageService.getBookings(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -117,6 +118,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                   return Dismissible(
                     key: Key(booking.id),
                     direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: Colors.red,
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
                     onDismissed: (direction) async {
                       await StorageService.deleteBooking(booking.id);
                     },
@@ -153,7 +160,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                   child: booking.provider.imageUrl.startsWith('http')
                       ? Image.network(booking.provider.imageUrl, width: 70, height: 70, fit: BoxFit.cover)
                       : Image.file(File(booking.provider.imageUrl), width: 70, height: 70, fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(color: Colors.blue[50], child: const Icon(Icons.person, color: Colors.blue))),
+                      errorBuilder: (context, error, stackTrace) => Container(width: 70, height: 70, color: Colors.blue[50], child: const Icon(Icons.person, color: Colors.blue))),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
@@ -186,8 +193,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               ],
             ),
 
-            // --- Action Buttons (Logic Updated) ---
-            if (booking.status == 'Pending') ...[
+            // --- Logic Update: Buttons dikhane ka tareeka ---
+            if (booking.status != 'Completed' && booking.status != 'Cancelled') ...[
               const Divider(height: 25),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -195,24 +202,22 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                   TextButton.icon(
                     onPressed: () async {
                       await StorageService.updateBookingStatus(booking.id, 'Cancelled');
-                      setState(() {});
+                      _refreshBookings();
                     },
                     icon: const Icon(Icons.close, color: Colors.red, size: 18),
                     label: const Text("Cancel", style: TextStyle(color: Colors.red)),
                   ),
                   const SizedBox(width: 10),
+                  // Complete button tab aayega jab provider accept kar le (ya aapne logic pending rakha hai to pending pe)
                   ElevatedButton.icon(
-                    onPressed: () {
-                      // Status direct update karne ki bajaye Dialog dikhayenge
-                      _showRatingDialog(context, booking);
-                    },
+                    onPressed: () => _showRatingDialog(context, booking),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       elevation: 0,
                     ),
-                    icon: const Icon(Icons.check, color: Colors.white, size: 18),
-                    label: const Text("Complete", style: TextStyle(color: Colors.white)),
+                    icon: const Icon(Icons.star, color: Colors.white, size: 18),
+                    label: const Text("Complete & Rate", style: TextStyle(color: Colors.white)),
                   ),
                 ],
               ),
@@ -227,6 +232,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     Color badgeColor;
     switch (status) {
       case 'Completed': badgeColor = Colors.green; break;
+      case 'Accepted': badgeColor = Colors.blue; break;
       case 'Cancelled': badgeColor = Colors.red; break;
       default: badgeColor = Colors.orange;
     }

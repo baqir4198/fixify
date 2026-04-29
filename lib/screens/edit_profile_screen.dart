@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  final ProviderModel currentProvider;
-  const EditProfileScreen({super.key, required this.currentProvider});
+  final ProviderModel user;
+  const EditProfileScreen({super.key, required this.user});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -14,132 +12,129 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+
   late TextEditingController _nameController;
-  late TextEditingController _priceController;
   late TextEditingController _aboutController;
-  String? _imagePath;
+  late TextEditingController _rateController;
+  late TextEditingController _passwordController;
+  late TextEditingController _confirmPasswordController;
+
+  bool _isPasswordVisible = false;
+  bool _showPasswordFields = false; // Is se fields show/hide hongi
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.currentProvider.name);
-    _priceController = TextEditingController(text: widget.currentProvider.pricePerHour.toString());
-    _aboutController = TextEditingController(text: widget.currentProvider.about);
-    _imagePath = widget.currentProvider.imageUrl;
+    _nameController = TextEditingController(text: widget.user.name);
+    _aboutController = TextEditingController(text: widget.user.about);
+    _rateController = TextEditingController(text: widget.user.pricePerHour.toString());
+    _passwordController = TextEditingController();
+    _confirmPasswordController = TextEditingController();
   }
 
-  Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _imagePath = image.path;
-      });
-    }
-  }
-
-  // --- Profile Save Logic ---
-  void _saveProfile() async {
+  void _saveChanges() async {
     if (_formKey.currentState!.validate()) {
-      // Naya Model object banaya jis mein email aur password purane wale hi pass kiye hain
-      ProviderModel updatedProvider = ProviderModel(
-        id: widget.currentProvider.id,
-        name: _nameController.text,
-        email: widget.currentProvider.email,       // Model update fix
-        password: widget.currentProvider.password, // Model update fix
-        profession: widget.currentProvider.profession,
-        rating: widget.currentProvider.rating,
-        pricePerHour: double.tryParse(_priceController.text) ?? widget.currentProvider.pricePerHour,
-        imageUrl: _imagePath ?? widget.currentProvider.imageUrl,
-        about: _aboutController.text,
+      String finalPassword = widget.user.password;
+
+      // Agar user ne fields kholi hain aur kuch likha hai
+      if (_showPasswordFields && _passwordController.text.isNotEmpty) {
+        if (_passwordController.text != _confirmPasswordController.text) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Passwords do not match!"), backgroundColor: Colors.red),
+          );
+          return;
+        }
+        finalPassword = _passwordController.text.trim();
+      }
+
+      ProviderModel updatedUser = ProviderModel(
+        id: widget.user.id,
+        name: _nameController.text.trim(),
+        email: widget.user.email,
+        password: finalPassword,
+        profession: widget.user.profession,
+        rating: widget.user.rating,
+        pricePerHour: double.tryParse(_rateController.text) ?? 0.0,
+        imageUrl: widget.user.imageUrl,
+        about: _aboutController.text.trim(),
       );
 
-      // Storage mein update kiya
-      await StorageService.updateProvider(updatedProvider);
-
-      if (!mounted) return;
-
-      // Wapis Dashboard par naya data bhej diya
-      Navigator.pop(context, updatedProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Profile Updated Successfully!"),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      await StorageService.updateProvider(updatedUser);
+      Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    bool isProvider = widget.user.profession != "Customer";
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text("Edit Profile", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Image Picker ---
-              GestureDetector(
-                onTap: _pickImage,
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.blue[50],
-                      backgroundImage: _imagePath != null
-                          ? (_imagePath!.startsWith('http')
-                          ? NetworkImage(_imagePath!)
-                          : FileImage(File(_imagePath!)) as ImageProvider)
-                          : null,
-                      child: (_imagePath == null || _imagePath!.isEmpty)
-                          ? const Icon(Icons.person, size: 60, color: Colors.blue)
-                          : null,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                      ),
-                    )
-                  ],
-                ),
-              ),
+              // --- Basic Info Section ---
+              _sectionHeader("General Information"),
+              _buildTextField("Full Name", _nameController, Icons.person_outline),
+
+              if (isProvider) ...[
+                const SizedBox(height: 15),
+                _buildTextField("Hourly Rate (Rs.)", _rateController, Icons.payments_outlined, isNumber: true),
+                const SizedBox(height: 15),
+                _buildTextField("About / Bio", _aboutController, Icons.info_outline, maxLines: 3),
+              ],
+
               const SizedBox(height: 30),
 
-              _buildTextField("Full Name", _nameController, Icons.person_outline),
-              const SizedBox(height: 20),
+              // --- Password Section with Toggle ---
+              _sectionHeader("Security"),
 
-              _buildTextField("Price per Hour (Rs.)", _priceController, Icons.payments_outlined, isNumber: true),
-              const SizedBox(height: 20),
+              if (!_showPasswordFields)
+                TextButton.icon(
+                  onPressed: () => setState(() => _showPasswordFields = true),
+                  icon: const Icon(Icons.lock_reset, color: Colors.blue),
+                  label: const Text("Change Password", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                )
+              else ...[
+                _buildTextField("New Password", _passwordController, Icons.lock_outline, isPassword: true),
+                const SizedBox(height: 15),
+                _buildTextField("Confirm New Password", _confirmPasswordController, Icons.lock_reset_outlined, isPassword: true),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _showPasswordFields = false;
+                      _passwordController.clear();
+                      _confirmPasswordController.clear();
+                    });
+                  },
+                  child: const Text("Cancel Password Change", style: TextStyle(color: Colors.red)),
+                ),
+              ],
 
-              _buildTextField("About / Experience", _aboutController, Icons.description_outlined, maxLines: 4),
               const SizedBox(height: 40),
 
+              // --- Save Button ---
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: _saveProfile,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue[700],
-                    elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
-                  child: const Text("Save Changes",
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  onPressed: _saveChanges,
+                  child: const Text("Update Profile", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -149,23 +144,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {bool isNumber = false, int maxLines = 1}) {
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+    );
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {int maxLines = 1, bool isNumber = false, bool isPassword = false}) {
     return TextFormField(
       controller: controller,
+      maxLines: isPassword ? 1 : maxLines,
+      obscureText: isPassword ? !_isPasswordVisible : false,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
+        suffixIcon: isPassword ? IconButton(
+          icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off),
+          onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+        ) : null,
         filled: true,
         fillColor: Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.grey.shade200),
-        ),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey.shade100)),
       ),
-      validator: (value) => value!.isEmpty ? "This field is required" : null,
+      validator: (value) {
+        if (_showPasswordFields && isPassword && value!.isEmpty) {
+          return "Please fill this field";
+        }
+        if (!isPassword && value!.isEmpty) {
+          return "This field is required";
+        }
+        return null;
+      },
     );
   }
 }
