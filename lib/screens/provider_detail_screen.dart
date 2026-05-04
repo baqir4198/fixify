@@ -149,6 +149,8 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                       );
 
                       await StorageService.saveBooking(newBooking);
+                      // Booking save hone ke baad auto-message bhej do
+                      await StorageService.sendAutoWelcomeMessage(newBooking);
 
                       if (!mounted) return;
                       Navigator.pop(ctx);
