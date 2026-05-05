@@ -209,9 +209,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                               onPressed: () {
                                 // TODO: Navigate to ChatScreen
                                 Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(booking: booking)));
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                /*ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text("Opening chat with ${booking.provider.name}...")),
-                                );
+                                );*/
                               },
                               icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.blue, size: 22),
                               constraints: const BoxConstraints(), // Padding kam karne ke liye
