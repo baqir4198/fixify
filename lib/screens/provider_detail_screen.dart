@@ -16,8 +16,6 @@ class ProviderDetailScreen extends StatefulWidget {
 class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
-
-  // REAL DATA: Customer ka naam lene ke liye controller
   final TextEditingController _nameController = TextEditingController();
 
   @override
@@ -72,7 +70,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           left: 25,
           right: 25,
           top: 30,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 30, // Keyboard ke liye jagah
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 30,
         ),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -88,8 +86,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             const SizedBox(height: 25),
             const Text("Booking Details", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
-
-            // REAL DATA INPUT FIELD
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
@@ -104,13 +100,10 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             _buildInfoRow(Icons.calendar_today, "Date", dateStr),
             _buildInfoRow(Icons.access_time, "Time", timeStr),
             _buildInfoRow(Icons.payments_outlined, "Price", "Rs. ${widget.provider.pricePerHour}"),
-
             const SizedBox(height: 30),
-
             Row(
               children: [
                 Expanded(
@@ -127,7 +120,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      // Validation: Name lazmi hona chahiye
                       if (_nameController.text.trim().isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Please enter your name first!")),
@@ -135,7 +127,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                         return;
                       }
 
-                      // NO DUMMY DATA: Customer Name controller se aa raha hai
                       final newBooking = BookingModel(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
                         provider: widget.provider,
@@ -149,7 +140,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                       );
 
                       await StorageService.saveBooking(newBooking);
-                      // Booking save hone ke baad auto-message bhej do
                       await StorageService.sendAutoWelcomeMessage(newBooking);
 
                       if (!mounted) return;
@@ -191,12 +181,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             pinned: true,
             backgroundColor: Colors.blue,
             flexibleSpace: FlexibleSpaceBar(
-              background: Hero(
-                tag: 'provider-${widget.provider.id}',
-                child: widget.provider.imageUrl.startsWith('http')
-                    ? Image.network(widget.provider.imageUrl, fit: BoxFit.cover)
-                    : Image.file(File(widget.provider.imageUrl), fit: BoxFit.cover),
-              ),
+              background: _buildTopImage(), // Update kiya gaya image logic
             ),
           ),
           SliverToBoxAdapter(
@@ -264,6 +249,40 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
           ),
           onPressed: _pickDateTime,
           child: const Text("Book Appointment Now", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+
+  // --- UPDATED TOP IMAGE LOGIC ---
+  Widget _buildTopImage() {
+    String url = widget.provider.imageUrl;
+    String name = widget.provider.name;
+
+    if (url.isEmpty) {
+      return Container(
+        color: Colors.blue[600],
+        child: Center(
+          child: Text(
+            name.isNotEmpty ? name[0].toUpperCase() : "?",
+            style: const TextStyle(fontSize: 120, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    return url.startsWith('http')
+        ? Image.network(url, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildErrorState(name))
+        : Image.file(File(url), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildErrorState(name));
+  }
+
+  Widget _buildErrorState(String name) {
+    return Container(
+      color: Colors.blue[600],
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : "?",
+          style: const TextStyle(fontSize: 100, color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
     );

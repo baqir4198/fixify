@@ -8,7 +8,8 @@ import 'edit_profile_screen.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final ProviderModel user; // 1. User object accept karein
+  const ProfileScreen({super.key, required this.user});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -18,59 +19,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int totalBookings = 0;
   int completedBookings = 0;
 
-  String userName = "Loading...";
-  String userEmail = "...";
-  String userInitial = "";
+  // 2. Late variable banaya taake hum widget.user se initialize kar sakein
+  late ProviderModel currentUser;
   String? _imagePath;
-  ProviderModel? currentUser;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    currentUser = widget.user; // Initials data pass ho gaya
+    _imagePath = currentUser.imageUrl;
     _loadStats();
   }
 
-  // --- User Data aur Saved Image Load Karein ---
-  Future<void> _loadUserData() async {
-    final users = await StorageService.getSavedProviders();
-    if (users.isNotEmpty) {
-      currentUser = users.last;
-      setState(() {
-        userName = currentUser!.name;
-        userEmail = currentUser!.email;
-        _imagePath = currentUser!.imageUrl;
-        userInitial = currentUser!.name.isNotEmpty ? currentUser!.name[0].toUpperCase() : "?";
-      });
-    }
-  }
-
-  // --- Direct Image Pick aur Save karne ka function ---
+  // --- Image Pick karne ka function (Professional version) ---
   Future<void> _pickAndSaveImage() async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
 
-      if (image != null && currentUser != null) {
-        // 1. UI update karein
+      if (image != null) {
         setState(() {
           _imagePath = image.path;
         });
 
-        // 2. Model update karke storage mein save karein
         ProviderModel updatedUser = ProviderModel(
-          id: currentUser!.id,
-          name: currentUser!.name,
-          email: currentUser!.email,
-          password: currentUser!.password,
-          profession: currentUser!.profession,
-          rating: currentUser!.rating,
-          pricePerHour: currentUser!.pricePerHour,
-          imageUrl: image.path, // Naya path save ho gaya
-          about: currentUser!.about,
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          password: currentUser.password,
+          profession: currentUser.profession,
+          rating: currentUser.rating,
+          pricePerHour: currentUser.pricePerHour,
+          imageUrl: image.path,
+          about: currentUser.about,
         );
 
         await StorageService.updateProvider(updatedUser);
+
+        // Local state update taake UI foran refresh ho
+        setState(() {
+          currentUser = updatedUser;
+        });
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +81,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    String userInitial = currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : "?";
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -104,13 +95,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-
-            // --- User Header (Ab Clickable hai) ---
             Center(
               child: Column(
                 children: [
                   GestureDetector(
-                    onTap: _pickAndSaveImage, // Poore circle ya pencil par click se picker khulega
+                    onTap: _pickAndSaveImage,
                     child: Stack(
                       alignment: Alignment.bottomRight,
                       children: [
@@ -122,17 +111,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: CircleAvatar(
                             radius: 55,
                             backgroundColor: Colors.blue.shade100,
-                            // Logic: Agar image path hai toh image dikhao, warna Initials
                             backgroundImage: (_imagePath != null && _imagePath!.isNotEmpty && !(_imagePath!.startsWith('http')))
                                 ? FileImage(File(_imagePath!))
                                 : (_imagePath != null && _imagePath!.startsWith('http'))
                                 ? NetworkImage(_imagePath!) as ImageProvider
                                 : null,
                             child: (_imagePath == null || _imagePath!.isEmpty)
-                                ? Text(
-                              userInitial,
-                              style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
-                            )
+                                ? Text(userInitial, style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue.shade800))
                                 : null,
                           ),
                         ),
@@ -145,29 +130,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      "CUSTOMER",
-                      style: TextStyle(color: Colors.blue, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-                    ),
+                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                    child: const Text("CUSTOMER", style: TextStyle(color: Colors.blue, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-
                   const SizedBox(height: 8),
-                  Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text(userEmail, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                  Text(currentUser.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(currentUser.email, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                 ],
               ),
             ),
-
             const SizedBox(height: 25),
-
-            // --- Baaki Menu Options ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -181,8 +155,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildProfileOption(Icons.person_outline, "Edit Profile", () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => EditProfileScreen(user: currentUser!)),
-                      ).then((value) => _loadUserData()); // Wapsi par data refresh
+                        MaterialPageRoute(builder: (context) => EditProfileScreen(user: currentUser)),
+                      ).then((_) {
+                        // Edit ke baad agar data change ho toh storage se refresh karein
+                        // Ya yahan callback logic laga sakte hain
+                      });
                     }),
                     _buildProfileDivider(),
                     _buildProfileOption(Icons.history, "Booking History", () {}),
@@ -194,10 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // Become Provider Card
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: InkWell(
@@ -227,7 +201,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 30),
             TextButton.icon(
               onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (r) => false),
@@ -237,17 +210,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 30),
           ],
         ),
-      ),
-    );
-  }
-
-  // Helper Widgets (BuildStatCard, BuildProfileOption, BuildProfileDivider) - same as before
-  Widget _buildStatCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 15),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: color.withOpacity(0.2))),
-        child: Column(children: [Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)), Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12))]),
       ),
     );
   }

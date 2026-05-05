@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:handyman_app/models/provider_model.dart'; // Model import
 import 'package:handyman_app/screens/provider_list_screen.dart';
 import 'package:handyman_app/widgets/category_card.dart';
-import 'package:handyman_app/services/storage_service.dart'; // Storage Service add kiya
 import '../models/service_model.dart';
 
-class HomeScreen extends StatefulWidget { // Ise StatefulWidget kar diya taake naam load ho sakay
-  const HomeScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  final ProviderModel user; // 1. User object accept karein
+  const HomeScreen({super.key, required this.user}); // 2. Constructor update kiya
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String userName = "User";
+  // Ab _loadName() ki zaroorat nahi hai, hum direct widget.user.name use karenge
 
   final List<ServiceModel> categories = [
     ServiceModel(id: '1', name: 'Plumbing', icon: Icons.plumbing, color: Colors.blue),
@@ -24,24 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _loadName();
-  }
-
-  // --- Login user ka naam load karne ke liye ---
-  Future<void> _loadName() async {
-    final users = await StorageService.getSavedProviders();
-    if (users.isNotEmpty) {
-      setState(() {
-        // Last register/login user ka naam uthaya
-        userName = users.last.name.split(' ')[0]; // Sirf First Name dikhane ke liye
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // Sirf pehla naam nikaalne ke liye logic (e.g. "Baqir Khan" -> "Baqir")
+    String firstName = widget.user.name.split(' ')[0];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: CustomScrollView(
@@ -75,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hello, $userName! 👋", // Ab asli naam ayega
+                    "Hello, $firstName! 👋", // 3. Ab direct login user ka naam ayega
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
@@ -85,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 25),
 
+                  // Search Bar
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15),
                     decoration: BoxDecoration(
@@ -108,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 25),
 
+                  // Discount Banner
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -166,7 +155,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   return CategoryCard(
                     service: service,
                     onTap: () {
-                      // Yahan se hum category name bhej rahe hain
                       Navigator.push(
                         context,
                         MaterialPageRoute(

@@ -172,4 +172,15 @@ class StorageService {
       await prefs.setStringList(_chatKey, updatedRaw);
     }
   }
+
+  static Future<void> deleteFullConversation(String bookingId) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Pehle messages saaf karein
+    await prefs.remove('chat_$bookingId');
+
+    // 2. Phir booking ko hi list se delete kar den
+    // Note: Ye aapke existing deleteBooking function ko call karega
+    await deleteBooking(bookingId);
+  }
 }

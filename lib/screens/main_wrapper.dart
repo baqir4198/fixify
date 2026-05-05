@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:handyman_app/models/provider_model.dart'; // Model import lazmi hai
 import 'package:handyman_app/screens/home_screen.dart';
 import 'package:handyman_app/screens/my_bookings_screen.dart';
 import 'package:handyman_app/screens/profile_screen.dart';
 
 class MainWrapper extends StatefulWidget {
-  const MainWrapper({super.key});
+  final ProviderModel user; // 1. User data receive karne ke liye variable
+  const MainWrapper({super.key, required this.user}); // 2. Constructor update kiya
 
   @override
   State<MainWrapper> createState() => _MainWrapperState();
@@ -13,17 +15,23 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [
-    HomeScreen(),
-    const MyBookingsScreen(),
-    const ProfileScreen(),
-  ];
+  // 3. Pages ko late list banaya taake widget.user ko use kar sakein
+  late List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    // 4. Screens ko widget.user pass kar diya
+    _pages = [
+      HomeScreen(user: widget.user), // Home ko user pass kiya
+      const MyBookingsScreen(),
+      ProfileScreen(user: widget.user), // Profile ko user pass kiya
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // IndexedStack ka faida ye hai ke screens ka state (scroll position)
-      // save rehta hai, bar-bar reload nahi hoti.
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
@@ -34,7 +42,7 @@ class _MainWrapperState extends State<MainWrapper> {
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
               blurRadius: 20,
-              offset: const Offset(0, -5), // Sirf top par shadow dikhane ke liye
+              offset: const Offset(0, -5),
             ),
           ],
         ),
@@ -52,21 +60,18 @@ class _MainWrapperState extends State<MainWrapper> {
           selectedFontSize: 12,
           unselectedFontSize: 12,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-          elevation: 0, // Humne container mein shadow di hai, isliye isse 0 rakhein
+          elevation: 0,
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded), // Modern icon style
-              activeIcon: Icon(Icons.grid_view_rounded),
+              icon: Icon(Icons.grid_view_rounded),
               label: "Home",
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.confirmation_number_outlined),
-              activeIcon: Icon(Icons.confirmation_number),
               label: "Bookings",
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
               label: 'Profile',
             )
           ],

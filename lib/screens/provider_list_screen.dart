@@ -24,30 +24,19 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     _loadAllProviders();
   }
 
-  // --- STRICTLY UPDATED LOGIC FOR REAL DATA ---
   Future<void> _loadAllProviders() async {
     setState(() => isLoading = true);
-
-    // 1. Storage se saare users mangwao
     final savedUsers = await StorageService.getSavedProviders();
 
     setState(() {
-      // 2. Filter Logic: Taake sirf sahi profession wale Providers nazar aayein
       allProviders = savedUsers.where((p) {
-        // Customer ko filter out karein
         if (p.profession == "Customer") return false;
-
         String category = widget.categoryName.toLowerCase().trim();
         String prof = p.profession.toLowerCase().trim();
-
-        // Flexible match: "Plumber" vs "Plumbing" ya "Electrical" vs "Electrician"
         bool match = prof.contains(category) || category.contains(prof);
-
-        // Agar exact match na ho toh pehle 4 letters match karein (e.g. "Elec")
         if (!match && prof.length >= 4 && category.length >= 4) {
           match = prof.substring(0, 4) == category.substring(0, 4);
         }
-
         return match;
       }).toList();
 
@@ -188,12 +177,10 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
           ),
           child: Row(
             children: [
-              Hero(
-                tag: 'provider-${provider.id}',
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: _buildImage(provider.imageUrl),
-                ),
+              // Image Section
+              ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: _buildProfileImage(provider.imageUrl, provider.name),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -233,17 +220,44 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
-  Widget _buildImage(String url) {
-    if (url.startsWith('http') || url.isEmpty) {
-      return Image.network(
-          url.isEmpty ? "https://i.pravatar.cc/150" : url,
-          width: 85, height: 85, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person))
-      );
-    } else {
-      return Image.file(File(url), width: 85, height: 85, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(width: 85, height: 85, color: Colors.grey[200], child: const Icon(Icons.person)));
+  // --- NAYA LOGIC: Initials agar image na ho ---
+  Widget _buildProfileImage(String url, String name) {
+    if (url.isEmpty) {
+      return _buildInitialsPlaceholder(name);
     }
+
+    return url.startsWith('http')
+        ? Image.network(
+      url,
+      width: 85, height: 85, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _buildInitialsPlaceholder(name),
+    )
+        : Image.file(
+      File(url),
+      width: 85, height: 85, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _buildInitialsPlaceholder(name),
+    );
+  }
+
+  Widget _buildInitialsPlaceholder(String name) {
+    String initial = name.isNotEmpty ? name[0].toUpperCase() : "?";
+    return Container(
+      width: 85,
+      height: 85,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[400]!, Colors.blue[700]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
   }
 
   Widget _buildEmptyState() {

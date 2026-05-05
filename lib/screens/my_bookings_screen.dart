@@ -4,6 +4,8 @@ import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
 
+import 'chat_screen.dart';
+
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
 
@@ -206,10 +208,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                             IconButton(
                               onPressed: () {
                                 // TODO: Navigate to ChatScreen
-                                // Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(booking: booking)));
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(booking: booking)));
+                                /*ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text("Opening chat with ${booking.provider.name}...")),
-                                );
+                                );*/
                               },
                               icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.blue, size: 22),
                               constraints: const BoxConstraints(), // Padding kam karne ke liye

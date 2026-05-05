@@ -18,38 +18,40 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
-  String userRole = "Customer"; // Default Role
+  String userRole = "Customer";
   String selectedCategory = "Cleaning";
   final List<String> categories = ["Cleaning", "Plumbing", "Electrician", "Painter", "Carpenter", "AC Repair"];
 
   void _handleSignUp() async {
-    // Basic Validation
-    if (_nameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    // 1. Professional Validation (Trimmed data)
+    String name = _nameController.text.trim();
+    String email = _emailController.text.trim().toLowerCase();
+    String password = _passwordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields!")));
       return;
     }
 
-    if (_passwordController.text != _confirmPasswordController.text) {
+    if (password != _confirmPasswordController.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passwords do not match!")));
       return;
     }
 
-    // Role ke hisab se data prepare karna
+    // 2. Data Preparation
     final newUser = ProviderModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-      // AGAR Provider hai toh selected category, warna "Customer" label
+      name: name,
+      email: email,
+      password: password,
       profession: userRole == "Provider" ? selectedCategory : "Customer",
-      // AGAR Provider hai toh rate, warna 0.0
-      pricePerHour: userRole == "Provider" ? (double.tryParse(_costController.text) ?? 0.0) : 0.0,
+      pricePerHour: userRole == "Provider" ? (double.tryParse(_costController.text.trim()) ?? 0.0) : 0.0,
       rating: userRole == "Provider" ? 5.0 : 0.0,
-      imageUrl: "", // Profile screen se update hogi
+      imageUrl: "",
       about: userRole == "Provider" ? "Professional $selectedCategory service provider." : "Customer Account",
     );
 
-    // Common Storage (Abhi hum saare users aik hi list mein rakh rahe hain)
+    // 3. Save to Storage
     await StorageService.saveProvider(newUser);
 
     if (!mounted) return;
@@ -58,7 +60,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       const SnackBar(content: Text("Account Created Successfully!"), backgroundColor: Colors.green),
     );
 
-    // Navigation based on Role
+    // 4. NAVIGATION WITH DATA (Fixed Logic)
     if (userRole == "Provider") {
       Navigator.pushAndRemoveUntil(
         context,
@@ -66,9 +68,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             (route) => false,
       );
     } else {
+      // Yahan humne naya user pass kar diya taake MainWrapper ko Baqir wala data na dikhana parray
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const MainWrapper()),
+        MaterialPageRoute(builder: (context) => MainWrapper(user: newUser)),
             (route) => false,
       );
     }
@@ -87,35 +90,35 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 25),
+          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28)),
+              const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 32, letterSpacing: -1)),
               const SizedBox(height: 10),
-              const Text("Join us to find or provide services", style: TextStyle(color: Colors.grey)),
+              const Text("Join us to find or provide services", style: TextStyle(color: Colors.grey, fontSize: 16)),
+              const SizedBox(height: 35),
+
+              // Role Selection UI
+              Row(children: [
+                _buildRoleOption("Customer", Icons.person_outline_rounded),
+                const SizedBox(width: 15),
+                _buildRoleOption("Provider", Icons.handyman_outlined),
+              ]),
               const SizedBox(height: 30),
 
-              // Role Selection
-              Row(children: [
-                _buildRoleOption("Customer", Icons.person),
-                const SizedBox(width: 15),
-                _buildRoleOption("Provider", Icons.handyman),
-              ]),
-              const SizedBox(height: 25),
-
-              // Common Fields
               _buildTextField(_nameController, "Full Name", Icons.person_outline),
               const SizedBox(height: 15),
-              _buildTextField(_emailController, "Email Address", Icons.email_outlined),
+              _buildTextField(_emailController, "Email Address", Icons.email_outlined, isEmail: true),
               const SizedBox(height: 15),
 
-              // AGAR Provider hai toh ye extra fields dikhao
               if (isProvider) ...[
-                const Text("Select Expertise", style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 8),
+                  child: Text("Select Expertise", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey[50],
                     borderRadius: BorderRadius.circular(15),
@@ -125,6 +128,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     child: DropdownButton<String>(
                       value: selectedCategory,
                       isExpanded: true,
+                      icon: const Icon(Icons.keyboard_arrow_down),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) => setState(() => selectedCategory = v!),
                     ),
@@ -138,23 +142,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
               _buildTextField(_passwordController, "Password", Icons.lock_outline, isObscure: true),
               const SizedBox(height: 15),
               _buildTextField(_confirmPasswordController, "Confirm Password", Icons.lock_reset_outlined, isObscure: true),
-              const SizedBox(height: 35),
+              const SizedBox(height: 40),
 
-              // Sign Up Button
               SizedBox(
                 width: double.infinity,
-                height: 55,
+                height: 58,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue[700],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
                   onPressed: _handleSignUp,
-                  child: const Text("Sign Up", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: const Text("Create Account", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 25),
             ],
           ),
         ),
@@ -167,35 +170,39 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => userRole = role),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 15),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.blue[50] : Colors.grey[50],
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade200),
+            color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.grey[50],
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade200, width: 2),
           ),
           child: Column(children: [
-            Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
-            const SizedBox(height: 5),
-            Text(role, style: TextStyle(color: isSelected ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
+            Icon(icon, color: isSelected ? Colors.blue : Colors.grey, size: 28),
+            const SizedBox(height: 8),
+            Text(role, style: TextStyle(color: isSelected ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
           ]),
         ),
       ),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, {bool isObscure = false, bool isNumber = false}) {
+  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, {bool isObscure = false, bool isNumber = false, bool isEmail = false}) {
     return TextField(
       controller: controller,
       obscureText: isObscure,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      keyboardType: isNumber ? TextInputType.number : (isEmail ? TextInputType.emailAddress : TextInputType.text),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon),
+        prefixIcon: Icon(icon, color: Colors.blueGrey),
         hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400),
         filled: true,
         fillColor: Colors.grey[50],
+        contentPadding: const EdgeInsets.symmetric(vertical: 18),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey.shade200)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.blue, width: 1.5)),
       ),
     );
   }

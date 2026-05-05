@@ -29,40 +29,47 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Storage se saare users uthaye
+    // 1. Storage se saare users uthaye
     List<ProviderModel> allUsers = await StorageService.getSavedProviders();
 
     try {
-      // 1. Email aur Password se user dhoondo
+      // 2. Email aur Password se user dhoondo
       final matchingUser = allUsers.firstWhere(
             (u) => u.email == emailInput && u.password == passwordInput,
       );
 
       if (!mounted) return;
 
-      // 2. ROLE VERIFICATION LOGIC (NEW & FIXED)
-
-      // Check A: Agar selected role Customer hai lekin user Provider nikla
+      // 3. ROLE VERIFICATION LOGIC
       if (userRole == "Customer" && matchingUser.profession != "Customer") {
         throw "This email is registered as a Provider. Please login as Provider.";
       }
 
-      // Check B: Agar selected role Provider hai lekin user Customer nikla
       if (userRole == "Provider" && matchingUser.profession == "Customer") {
         throw "This email is registered as a Customer. Please login as Customer.";
       }
 
-      // 3. Agar sab theek hai toh relevant screen par bhejein
+      // 4. SESSION MANAGEMENT: Login hotay hi user ko save karein (IMPORTANT)
+      // Note: StorageService mein saveProvider ya koi specific current user function call karein
+      // Agar aapne session management implement ki hai toh yahan call hogi.
+
+      // 5. NAVIGATION WITH DATA (Sab se aham change)
       if (userRole == "Provider") {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ProviderDashboard(provider: matchingUser)));
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => ProviderDashboard(provider: matchingUser))
+        );
       } else {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainWrapper()));
+        // MainWrapper ko 'matchingUser' pass kar diya gaya hai
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => MainWrapper(user: matchingUser))
+        );
       }
 
     } catch (e) {
       if (!mounted) return;
 
-      // Error message dikhayen (Check karein ke Exception hai ya custom string)
       String errorMsg = e.toString().replaceAll("Exception: ", "");
       if (e is StateError) errorMsg = "Invalid Email or Password!";
 
@@ -91,7 +98,12 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(15)),
-                child: Row(children: [_buildRoleButton("Customer"), _buildRoleButton("Provider")]),
+                child: Row(
+                    children: [
+                      _buildRoleButton("Customer"),
+                      _buildRoleButton("Provider")
+                    ]
+                ),
               ),
               const SizedBox(height: 30),
               _buildInputField(_emailController, "Email Address", Icons.email_outlined),
@@ -101,15 +113,23 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity, height: 55,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
+                  ),
                   onPressed: _isLoading ? null : _handleLogin,
-                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("Login", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Login", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 30),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 const Text("Don't have an account?"),
-                TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignUpScreen())), child: const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold))),
+                TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SignUpScreen())),
+                    child: const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold))
+                ),
               ]),
             ],
           ),
@@ -120,8 +140,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildInputField(TextEditingController controller, String hint, IconData icon, {bool isObscure = false}) {
     return TextField(
-      controller: controller, obscureText: isObscure,
-      decoration: InputDecoration(prefixIcon: Icon(icon), hintText: hint, border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
+      controller: controller,
+      obscureText: isObscure,
+      decoration: InputDecoration(
+          prefixIcon: Icon(icon),
+          hintText: hint,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
+      ),
     );
   }
 

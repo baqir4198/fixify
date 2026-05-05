@@ -20,7 +20,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _confirmPasswordController;
 
   bool _isPasswordVisible = false;
-  bool _showPasswordFields = false; // Is se fields show/hide hongi
+  bool _showPasswordFields = false;
 
   @override
   void initState() {
@@ -36,7 +36,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_formKey.currentState!.validate()) {
       String finalPassword = widget.user.password;
 
-      // Agar user ne fields kholi hain aur kuch likha hai
       if (_showPasswordFields && _passwordController.text.isNotEmpty) {
         if (_passwordController.text != _confirmPasswordController.text) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -47,6 +46,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         finalPassword = _passwordController.text.trim();
       }
 
+      // Professional Way: Model update karte waqt saaray fields ko correctly pass karna
       ProviderModel updatedUser = ProviderModel(
         id: widget.user.id,
         name: _nameController.text.trim(),
@@ -55,17 +55,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         profession: widget.user.profession,
         rating: widget.user.rating,
         pricePerHour: double.tryParse(_rateController.text) ?? 0.0,
-        imageUrl: widget.user.imageUrl,
+        imageUrl: widget.user.imageUrl, // Existing image URL ko maintain rakha hai
         about: _aboutController.text.trim(),
       );
 
       await StorageService.updateProvider(updatedUser);
+
+      if (!mounted) return;
+
+      // Success indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
+      );
+
       Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Logic to check if the user is a provider or customer
     bool isProvider = widget.user.profession != "Customer";
 
     return Scaffold(
@@ -83,7 +92,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Basic Info Section ---
               _sectionHeader("General Information"),
               _buildTextField("Full Name", _nameController, Icons.person_outline),
 
@@ -96,7 +104,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
               const SizedBox(height: 30),
 
-              // --- Password Section with Toggle ---
               _sectionHeader("Security"),
 
               if (!_showPasswordFields)
@@ -124,7 +131,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
               const SizedBox(height: 40),
 
-              // --- Save Button ---
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -170,10 +176,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey.shade100)),
       ),
       validator: (value) {
-        if (_showPasswordFields && isPassword && value!.isEmpty) {
+        if (_showPasswordFields && isPassword && (value == null || value.isEmpty)) {
           return "Please fill this field";
         }
-        if (!isPassword && value!.isEmpty) {
+        if (!isPassword && (value == null || value.isEmpty)) {
           return "This field is required";
         }
         return null;
