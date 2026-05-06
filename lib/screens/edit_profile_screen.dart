@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:handyman_app/models/provider_model.dart';
-import 'package:handyman_app/services/storage_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final ProviderModel user;
@@ -21,6 +22,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   bool _isPasswordVisible = false;
   bool _showPasswordFields = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -34,47 +36,65 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _saveChanges() async {
     if (_formKey.currentState!.validate()) {
-      String finalPassword = widget.user.password;
+      setState(() => _isLoading = true);
 
-      if (_showPasswordFields && _passwordController.text.isNotEmpty) {
-        if (_passwordController.text != _confirmPasswordController.text) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Passwords do not match!"), backgroundColor: Colors.red),
-          );
-          return;
+      try {
+        User? currentUser = FirebaseAuth.instance.currentUser;
+
+        // 1. Agar password change karna hai
+        if (_showPasswordFields && _passwordController.text.isNotEmpty) {
+          if (_passwordController.text != _confirmPasswordController.text) {
+            _showError("Passwords do not match!");
+            setState(() => _isLoading = false);
+            return;
+          }
+          await currentUser!.updatePassword(_passwordController.text.trim());
         }
-        finalPassword = _passwordController.text.trim();
+
+        // 2. Updated Model taiyar karein (cnicUrl maintain rakha hai)
+        ProviderModel updatedUser = ProviderModel(
+          id: widget.user.id,
+          name: _nameController.text.trim(),
+          email: widget.user.email,
+          password: "", // Database mein plain password nahi rakhte
+          profession: widget.user.profession,
+          rating: widget.user.rating,
+          pricePerHour: double.tryParse(_rateController.text) ?? 0.0,
+          imageUrl: widget.user.imageUrl,
+          cnicUrl: widget.user.cnicUrl, // Ye field lazmi pass karni hai
+          about: _aboutController.text.trim(),
+        );
+
+        // 3. Firestore mein update karein
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.user.id)
+            .update(updatedUser.toMap());
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
+        );
+
+        Navigator.pop(context, true); // True bhejte hain taake pichli screen refresh ho jaye
+
+      } catch (e) {
+        _showError("Update Failed: $e");
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
-
-      // Professional Way: Model update karte waqt saaray fields ko correctly pass karna
-      ProviderModel updatedUser = ProviderModel(
-        id: widget.user.id,
-        name: _nameController.text.trim(),
-        email: widget.user.email,
-        password: finalPassword,
-        profession: widget.user.profession,
-        rating: widget.user.rating,
-        pricePerHour: double.tryParse(_rateController.text) ?? 0.0,
-        imageUrl: widget.user.imageUrl, // Existing image URL ko maintain rakha hai
-        about: _aboutController.text.trim(),
-      );
-
-      await StorageService.updateProvider(updatedUser);
-
-      if (!mounted) return;
-
-      // Success indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
-      );
-
-      Navigator.pop(context, true);
     }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Logic to check if the user is a provider or customer
     bool isProvider = widget.user.profession != "Customer";
 
     return Scaffold(
@@ -85,7 +105,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -103,7 +125,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ],
 
               const SizedBox(height: 30),
-
               _sectionHeader("Security"),
 
               if (!_showPasswordFields)
@@ -130,7 +151,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ],
 
               const SizedBox(height: 40),
-
               SizedBox(
                 width: double.infinity,
                 height: 55,

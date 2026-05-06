@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/service_model.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class CategoryCard extends StatelessWidget {
   final ServiceModel service;
@@ -13,62 +14,75 @@ class CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
+    return Material( // Material add kiya taake InkWell ka splash nazar aaye
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        splashColor: service.color.withOpacity(0.1),
+        highlightColor: service.color.withOpacity(0.05),
+        child: AnimatedContainer( // Click feel behtar karne ke liye
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03), // Zyada natural shadow
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+            border: Border.all(
               color: service.color.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
+              width: 1,
             ),
-          ],
-          border: Border.all(
-            color: service.color.withOpacity(0.05),
-            width: 1.5,
           ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon Container with soft background
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: service.color.withOpacity(0.1),
-                shape: BoxShape.circle,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Icon Container
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: service.color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(15), // Circle ki jagah Rounded Square
+                ),
+                child: Icon(
+                  service.icon,
+                  size: 30,
+                  color: service.color,
+                ),
               ),
-              child: Icon(
-                service.icon,
-                size: 32,
-                color: service.color,
+              const SizedBox(height: 12),
+              // Name
+              Text(
+                service.name,
+                style: GoogleFonts.poppins( // Professional Font
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            // Text Label
-            Text(
-              service.name,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+              const SizedBox(height: 2),
+              // Status/Subtitle
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: service.color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  "Available", // "Book Now" ki jagah zyada trust-building word
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: service.color,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            // Subtitle (Optional but looks pro)
-            Text(
-              "Book Now",
-              style: TextStyle(
-                fontSize: 11,
-                color: service.color.withOpacity(0.8),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

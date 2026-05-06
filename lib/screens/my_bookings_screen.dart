@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 
 class MyBookingsScreen extends StatefulWidget {
@@ -14,13 +14,8 @@ class MyBookingsScreen extends StatefulWidget {
 }
 
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
+  final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-  // Ab setState ki zaroorat nahi padegi refresh ke liye, lekin function rakh lete hain compatibility ke liye
-  Future<void> _refreshBookings() async {
-    setState(() {});
-  }
-
-  // --- Rating Dialog Function (Same as before) ---
   void _showRatingDialog(BuildContext context, BookingModel booking) {
     double selectedRating = 5.0;
 
@@ -28,29 +23,28 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Rate Service", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        title: const Text("Rate the Experience",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("How was your experience with", textAlign: TextAlign.center),
-            Text(booking.provider.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+            const Text("How was your service from", textAlign: TextAlign.center),
+            Text(booking.provider.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
             const SizedBox(height: 20),
             StatefulBuilder(
               builder: (context, setDialogState) => Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (index) {
-                  return IconButton(
-                    icon: Icon(
+                  return GestureDetector(
+                    onTap: () => setDialogState(() => selectedRating = index + 1.0),
+                    child: Icon(
                       index < selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
                       color: Colors.orange,
-                      size: 35,
+                      size: 40,
                     ),
-                    onPressed: () {
-                      setDialogState(() {
-                        selectedRating = index + 1.0;
-                      });
-                    },
                   );
                 }),
               ),
@@ -59,23 +53,23 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Skip", style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Skip", style: TextStyle(color: Colors.grey))
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: Colors.blue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
             ),
             onPressed: () async {
+              // Status update aur rating save karne ka logic
               await StorageService.updateBookingStatus(booking.id, 'Completed');
-              await StorageService.updateProviderRating(booking.provider.id, selectedRating);
-              if (!mounted) return;
-              Navigator.pop(context);
-              // Refresh karne ki zaroorat nahi, Stream khud hi detect kar legi
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Thanks for your feedback!"), backgroundColor: Colors.green),
-              );
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Feedback submitted! Successfully completed."))
+                );
+              }
             },
             child: const Text("Submit", style: TextStyle(color: Colors.white)),
           ),
@@ -89,34 +83,33 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
+        backgroundColor: const Color(0xFFF0F2F5),
         appBar: AppBar(
-          title: const Text("My Appointments", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          title: const Text("My Appointments", style: TextStyle(fontWeight: FontWeight.bold)),
           backgroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
-          bottom: const TabBar(
+          bottom: TabBar(
             labelColor: Colors.blue,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.blue,
-            indicatorWeight: 3,
-            tabs: [
+            unselectedLabelColor: Colors.grey[400],
+            indicator: const UnderlineTabIndicator(
+              borderSide: BorderSide(width: 3, color: Colors.blue),
+              insets: EdgeInsets.symmetric(horizontal: 20),
+            ),
+            tabs: const [
               Tab(text: "Pending"),
               Tab(text: "Active"),
               Tab(text: "History"),
             ],
           ),
         ),
-        // --- STREAMBUILDER LOGIC YAHAN HAI ---
         body: StreamBuilder<List<BookingModel>>(
-          stream: StorageService.getBookingsStream(), // Naya Stream function use ho raha hai
+          stream: StorageService.getUserBookingsStream(currentUserId),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator(color: Colors.blue));
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
-              return Center(child: Text("Error: ${snapshot.error}"));
-            }
+            if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
 
             final allBookings = snapshot.data ?? [];
 
@@ -124,7 +117,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               children: [
                 _buildBookingList(allBookings, 'Pending'),
                 _buildBookingList(allBookings, 'Accepted'),
-                _buildBookingList(allBookings, 'Completed'),
+                _buildBookingList(allBookings, ['Completed', 'Cancelled']),
               ],
             );
           },
@@ -133,170 +126,170 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     );
   }
 
-  Widget _buildBookingList(List<BookingModel> allBookings, String status) {
-    final filteredBookings = allBookings.where((b) => b.status == status).toList();
+  Widget _buildBookingList(List<BookingModel> allBookings, dynamic status) {
+    final filtered = allBookings.where((b) {
+      if (status is List) return status.contains(b.status);
+      return b.status == status;
+    }).toList();
 
-    if (filteredBookings.isEmpty) {
-      return _buildEmptyState(status);
-    }
+    if (filtered.isEmpty) return _buildEmptyState();
 
     return ListView.builder(
-      padding: const EdgeInsets.only(top: 10, bottom: 20),
-      itemCount: filteredBookings.length,
-      itemBuilder: (context, index) {
-        final booking = filteredBookings[index];
-        return Dismissible(
-          key: Key(booking.id),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(20)),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          onDismissed: (direction) async {
-            await StorageService.deleteBooking(booking.id);
-          },
-          child: _buildProfessionalBookingCard(booking),
-        );
-      },
+      padding: const EdgeInsets.all(16),
+      itemCount: filtered.length,
+      itemBuilder: (context, index) => _buildBookingCard(filtered[index]),
     );
   }
 
-  Widget _buildProfessionalBookingCard(BookingModel booking) {
+  Widget _buildBookingCard(BookingModel booking) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 5)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4)
+          )
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          children: [
-            Row(
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.all(15),
+            leading: _buildAvatar(booking),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: booking.provider.imageUrl.startsWith('http')
-                      ? Image.network(booking.provider.imageUrl, width: 70, height: 70, fit: BoxFit.cover)
-                      : Image.file(File(booking.provider.imageUrl), width: 70, height: 70, fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(width: 70, height: 70, color: Colors.blue[50], child: const Icon(Icons.person, color: Colors.blue))),
-                ),
-                const SizedBox(width: 15),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Provider Name
-                          Expanded(
-                            child: Text(
-                              booking.provider.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          // --- CHAT ICON ADDED HERE ---
-                          if (booking.status == 'Pending' || booking.status == 'Accepted')
-                            IconButton(
-                              onPressed: () {
-                                // TODO: Navigate to ChatScreen
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(booking: booking)));
-                                /*ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("Opening chat with ${booking.provider.name}...")),
-                                );*/
-                              },
-                              icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.blue, size: 22),
-                              constraints: const BoxConstraints(), // Padding kam karne ke liye
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                            ),
-
-                          _buildStatusBadge(booking.status),
-                        ],
-                      ),
-                      Text(booking.provider.profession, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_month, size: 14, color: Colors.blue[700]),
-                          const SizedBox(width: 4),
-                          Text(DateFormat('EEE, MMM d').format(booking.date), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                          const SizedBox(width: 10),
-                          Icon(Icons.access_time_filled, size: 14, color: Colors.blue[700]),
-                          const SizedBox(width: 4),
-                          Text(booking.time, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ],
-                  ),
+                    child: Text(
+                        booking.provider.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                    )
+                ),
+                _statusBadge(booking.status),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    booking.serviceName,
+                    style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w500)
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 5),
+                    Text(DateFormat('MMM d, yyyy').format(booking.date),
+                        style: const TextStyle(fontSize: 12)),
+                    const SizedBox(width: 15),
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 5),
+                    Text(booking.time, style: const TextStyle(fontSize: 12)),
+                  ],
                 ),
               ],
             ),
-            if (booking.status != 'Completed' && booking.status != 'Cancelled') ...[
-              const Divider(height: 25),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+          ),
+          if (booking.status == 'Accepted' || booking.status == 'Pending')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+              child: Row(
                 children: [
-                  if (booking.status == 'Pending')
-                    TextButton.icon(
-                      onPressed: () async {
-                        await StorageService.updateBookingStatus(booking.id, 'Cancelled');
-                      },
-                      icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                      label: const Text("Cancel", style: TextStyle(color: Colors.red)),
-                    ),
-                  const SizedBox(width: 10),
-                  if (booking.status == 'Accepted')
-                    ElevatedButton.icon(
-                      onPressed: () => _showRatingDialog(context, booking),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => ChatScreen(booking: booking))
                       ),
-                      icon: const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                      label: const Text("Complete & Rate", style: TextStyle(color: Colors.white)),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                      label: const Text("Message"),
+                      style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (booking.status == 'Accepted')
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _showRatingDialog(context, booking),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                        ),
+                        child: const Text("Complete", style: TextStyle(color: Colors.white)),
+                      ),
+                    ),
+                  if (booking.status == 'Pending')
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          await StorageService.updateBookingStatus(booking.id, 'Cancelled');
+                        },
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                        ),
+                        child: const Text("Cancel"),
+                      ),
                     ),
                 ],
               ),
-            ]
-          ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(BookingModel booking) {
+    return Container(
+      width: 60, height: 60,
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          color: Colors.blue[50]
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: booking.provider.imageUrl.isEmpty
+            ? const Icon(Icons.person, color: Colors.blue, size: 30)
+            : Image.network(
+          booking.provider.imageUrl,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+          },
+          errorBuilder: (context, error, stackTrace) =>
+          const Icon(Icons.broken_image, color: Colors.grey),
         ),
       ),
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color badgeColor;
-    switch (status) {
-      case 'Completed': badgeColor = Colors.green; break;
-      case 'Accepted': badgeColor = Colors.blue; break;
-      case 'Cancelled': badgeColor = Colors.red; break;
-      default: badgeColor = Colors.orange;
-    }
+  Widget _statusBadge(String status) {
+    Color color = status == 'Accepted' ? Colors.blue : (status == 'Completed' ? Colors.green : Colors.orange);
+    if (status == 'Cancelled') color = Colors.red;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: badgeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(status, style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 
-  Widget _buildEmptyState(String status) {
+  Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.event_note, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 20),
-          Text("No $status bookings", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black54)),
-          Text("Your $status requests will appear here", style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Icon(Icons.calendar_today_outlined, size: 70, color: Colors.grey[300]),
+          const SizedBox(height: 15),
+          const Text("No appointments found", style: TextStyle(color: Colors.grey, fontSize: 16)),
         ],
       ),
     );

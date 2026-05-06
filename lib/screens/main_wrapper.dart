@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:handyman_app/models/provider_model.dart'; // Model import lazmi hai
+import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/home_screen.dart';
-import 'package:handyman_app/screens/my_bookings_screen.dart';
 import 'package:handyman_app/screens/profile_screen.dart';
+import 'package:handyman_app/screens/messages_list_screen.dart';
+import 'my_bookings_screen.dart'; // Inbox import
 
 class MainWrapper extends StatefulWidget {
-  final ProviderModel user; // 1. User data receive karne ke liye variable
-  const MainWrapper({super.key, required this.user}); // 2. Constructor update kiya
+  final ProviderModel user;
+  const MainWrapper({super.key, required this.user});
 
   @override
   State<MainWrapper> createState() => _MainWrapperState();
@@ -14,24 +15,24 @@ class MainWrapper extends StatefulWidget {
 
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
-
-  // 3. Pages ko late list banaya taake widget.user ko use kar sakein
   late List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-    // 4. Screens ko widget.user pass kar diya
     _pages = [
-      HomeScreen(user: widget.user), // Home ko user pass kiya
+      HomeScreen(user: widget.user),
       const MyBookingsScreen(),
-      ProfileScreen(user: widget.user), // Profile ko user pass kiya
+      // Inbox page add kar di (Is mein providerId ya userId pass karein)
+      MessagesListScreen(providerId: widget.user.id),
+      ProfileScreen(user: widget.user),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // IndexedStack best hai state preserve karne ke liye
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
@@ -40,7 +41,7 @@ class _MainWrapperState extends State<MainWrapper> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 20,
               offset: const Offset(0, -5),
             ),
@@ -48,32 +49,38 @@ class _MainWrapperState extends State<MainWrapper> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
+          onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           selectedItemColor: Colors.blueAccent,
           unselectedItemColor: Colors.grey[400],
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
           selectedFontSize: 12,
           unselectedFontSize: 12,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
           elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded),
-              label: "Home",
+          items: [
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.explore_outlined),
+              activeIcon: Icon(Icons.explore),
+              label: "Explore",
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.confirmation_number_outlined),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today_outlined),
+              activeIcon: Icon(Icons.calendar_today),
               label: "Bookings",
             ),
-            BottomNavigationBarItem(
+            // Message Tab with Badge (Optional logic baad mein dal sakte hain)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline_rounded),
+              activeIcon: Icon(Icons.chat_bubble_rounded),
+              label: "Messages",
+            ),
+            const BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),
+              activeIcon: Icon(Icons.person_rounded),
               label: 'Profile',
-            )
+            ),
           ],
         ),
       ),

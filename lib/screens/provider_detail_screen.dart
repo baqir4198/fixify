@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // FirebaseAuth add kiya
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/provider_model.dart';
 import '../models/booking_model.dart';
 import '../services/storage_service.dart';
@@ -17,6 +19,17 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   final TextEditingController _nameController = TextEditingController();
+  bool _isBooking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill name from current logged in user if possible
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.displayName != null) {
+      _nameController.text = user.displayName!;
+    }
+  }
 
   @override
   void dispose() {
@@ -24,26 +37,20 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     super.dispose();
   }
 
-  // --- Date and Time Picker Logic ---
+  // --- Date and Time Picker ---
   Future<void> _pickDateTime() async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 30)),
-      builder: (context, child) => Theme(
-        data: ThemeData.light().copyWith(
-          colorScheme: const ColorScheme.light(primary: Colors.blue),
-        ),
-        child: child!,
-      ),
     );
 
     if (pickedDate != null) {
       if (!mounted) return;
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.now(),
+        initialTime: const TimeOfDay(hour: 10, minute: 0),
       );
 
       if (pickedTime != null) {
@@ -64,107 +71,80 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.only(
-          left: 25,
-          right: 25,
-          top: 30,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 30,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 50, height: 5,
-              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
-            ),
-            const SizedBox(height: 25),
-            const Text("Booking Details", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: "Your Full Name",
-                hintText: "Enter name to show on dashboard",
-                prefixIcon: const Icon(Icons.person_pin_rounded),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      builder: (ctx) => StatefulBuilder( // Status update ke liye
+        builder: (context, setModalState) => Container(
+          padding: EdgeInsets.only(
+            left: 25, right: 25, top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 30,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+              const SizedBox(height: 20),
+              const Text("Confirm Booking", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _nameController,
+                decoration: InputDecoration(
+                  labelText: "Your Full Name",
+                  prefixIcon: const Icon(Icons.person_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            _buildInfoRow(Icons.calendar_today, "Date", dateStr),
-            _buildInfoRow(Icons.access_time, "Time", timeStr),
-            _buildInfoRow(Icons.payments_outlined, "Price", "Rs. ${widget.provider.pricePerHour}"),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.all(18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    ),
-                    child: const Text("Cancel"),
-                  ),
+              const SizedBox(height: 20),
+              _buildInfoRow(Icons.calendar_today, "Date", dateStr),
+              _buildInfoRow(Icons.access_time, "Time", timeStr),
+              _buildInfoRow(Icons.payments_outlined, "Estimated", "Rs. ${widget.provider.pricePerHour}"),
+              const SizedBox(height: 25),
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _isBooking ? null : () async {
+                    if (_nameController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter your name")));
+                      return;
+                    }
+
+                    setModalState(() => _isBooking = true);
+
+                    // 1. Get Real User ID from Firebase
+                    final String uid = FirebaseAuth.instance.currentUser?.uid ?? "guest_user";
+
+                    // 2. Create Booking Object
+                    final newBooking = BookingModel(
+                      id: FirebaseFirestore.instance.collection('bookings').doc().id, // Unique ID from Firestore
+                      provider: widget.provider,
+                      customerName: _nameController.text.trim(),
+                      customerId: uid, // REAL ID
+                      date: _selectedDate!,
+                      time: timeStr,
+                      serviceName: widget.provider.profession,
+                      price: widget.provider.pricePerHour.toString(),
+                      status: 'Pending',
+                    );
+
+                    // 3. Save to Firestore
+                    await StorageService.saveBooking(newBooking);
+
+                    if (!mounted) return;
+                    Navigator.pop(ctx); // Close Sheet
+                    Navigator.pop(context); // Back to Home
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Request sent to ${widget.provider.name}!"), backgroundColor: Colors.green),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: _isBooking
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Confirm & Send Request", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      if (_nameController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Please enter your name first!")),
-                        );
-                        return;
-                      }
-
-                      final newBooking = BookingModel(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        provider: widget.provider,
-                        customerName: _nameController.text.trim(),
-                        customerId: "REAL_USER_${DateTime.now().second}",
-                        date: _selectedDate!,
-                        time: timeStr,
-                        serviceName: widget.provider.profession,
-                        price: widget.provider.pricePerHour.toString(),
-                        status: 'Pending',
-                      );
-
-                      await StorageService.saveBooking(newBooking);
-                      await StorageService.sendAutoWelcomeMessage(newBooking);
-
-                      if (!mounted) return;
-                      Navigator.pop(ctx);
-                      Navigator.pop(context);
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("Request sent for ${newBooking.customerName}!"),
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.all(18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    ),
-                    child: const Text("Confirm Now", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -173,15 +153,13 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 380,
+            expandedHeight: 350,
             pinned: true,
-            backgroundColor: Colors.blue,
             flexibleSpace: FlexibleSpaceBar(
-              background: _buildTopImage(), // Update kiya gaya image logic
+              background: _buildTopImage(),
             ),
           ),
           SliverToBoxAdapter(
@@ -191,44 +169,31 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(widget.provider.name, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(widget.provider.profession, style: const TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.bold)),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.provider.name, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                            Text(widget.provider.profession, style: const TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                        decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(15)),
-                        child: Text("Rs.${widget.provider.pricePerHour.toInt()}/hr", style: const TextStyle(fontSize: 18, color: Colors.blue, fontWeight: FontWeight.bold)),
-                      )
+                      Text("Rs.${widget.provider.pricePerHour.toInt()}/hr", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
                     ],
                   ),
+                  const SizedBox(height: 25),
+                  _buildStatsRow(),
                   const SizedBox(height: 30),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(20)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildStatItem(Icons.star, "Rating", "${widget.provider.rating}"),
-                        _buildStatItem(Icons.work_history, "Exp.", "5+ Years"),
-                        _buildStatItem(Icons.verified, "Jobs", "150+"),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 35),
-                  const Text("Service Description", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
+                  const Text("About Me", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
                   Text(
-                    "Professional ${widget.provider.profession} available for high-quality home maintenance. I provide reliable services with focus on detail and customer satisfaction.",
-                    style: TextStyle(fontSize: 15, color: Colors.grey[600], height: 1.6),
+                    widget.provider.about.isEmpty
+                        ? "Expert ${widget.provider.profession} with years of experience in providing high-quality service."
+                        : widget.provider.about,
+                    style: TextStyle(color: Colors.grey[600], height: 1.5),
                   ),
-                  const SizedBox(height: 120),
+                  const SizedBox(height: 100),
                 ],
               ),
             ),
@@ -237,80 +202,59 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       ),
       bottomSheet: Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
-        ),
+        decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
         child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            minimumSize: const Size(double.infinity, 60),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          ),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
           onPressed: _pickDateTime,
-          child: const Text("Book Appointment Now", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          child: const Text("Book Now", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
         ),
       ),
     );
   }
 
-  // --- UPDATED TOP IMAGE LOGIC ---
   Widget _buildTopImage() {
-    String url = widget.provider.imageUrl;
-    String name = widget.provider.name;
-
-    if (url.isEmpty) {
-      return Container(
-        color: Colors.blue[600],
-        child: Center(
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : "?",
-            style: const TextStyle(fontSize: 120, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-        ),
-      );
-    }
-
-    return url.startsWith('http')
-        ? Image.network(url, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildErrorState(name))
-        : Image.file(File(url), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildErrorState(name));
+    return widget.provider.imageUrl.startsWith('http')
+        ? Image.network(widget.provider.imageUrl, fit: BoxFit.cover)
+        : (widget.provider.imageUrl.isNotEmpty
+        ? Image.file(File(widget.provider.imageUrl), fit: BoxFit.cover)
+        : Container(color: Colors.blue[300], child: const Icon(Icons.person, size: 100, color: Colors.white)));
   }
 
-  Widget _buildErrorState(String name) {
+  Widget _buildStatsRow() {
     return Container(
-      color: Colors.blue[600],
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : "?",
-          style: const TextStyle(fontSize: 100, color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _statItem(Icons.star, "Rating", "${widget.provider.rating}"),
+          _statItem(Icons.verified_user, "Status", "Verified"),
+          _statItem(Icons.timer, "Exp", "5+ Yrs"),
+        ],
       ),
     );
   }
 
-  Widget _buildStatItem(IconData icon, String label, String value) {
+  Widget _statItem(IconData icon, String label, String value) {
     return Column(
       children: [
-        Icon(icon, color: Colors.orange, size: 26),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        Icon(icon, color: Colors.orange),
+        const SizedBox(height: 5),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.blue),
-          const SizedBox(width: 15),
-          Text("$label: ", style: const TextStyle(color: Colors.grey, fontSize: 15)),
-          const Spacer(),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        ],
-      ),
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.blue),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: Colors.grey)),
+        const Spacer(),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }

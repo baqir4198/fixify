@@ -1,11 +1,11 @@
-enum MessageType { text, audio, video }
+enum MessageType { text, audio, video, image } // Maine 'image' bhi add kar diya hai future ke liye
 
 class MessageModel {
   final String id;
   final String bookingId;
   final String senderId;
   final String receiverId;
-  final String content; // Text message ya file ka path
+  final String content;
   final MessageType type;
   final DateTime timestamp;
   bool isSeen;
@@ -28,22 +28,42 @@ class MessageModel {
       'senderId': senderId,
       'receiverId': receiverId,
       'content': content,
-      'type': type.index, // Enum ko number mein save karenge
+      'type': type.index,
       'timestamp': timestamp.toIso8601String(),
       'isSeen': isSeen,
     };
   }
 
-  factory MessageModel.fromMap(Map<String, dynamic> map) {
+  factory MessageModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return MessageModel(
-      id: map['id'],
-      bookingId: map['bookingId'],
-      senderId: map['senderId'],
-      receiverId: map['receiverId'],
-      content: map['content'],
-      type: MessageType.values[map['type']],
-      timestamp: DateTime.parse(map['timestamp']),
+      id: docId ?? (map['id'] ?? ''),
+      bookingId: map['bookingId'] ?? '',
+      senderId: map['senderId'] ?? '',
+      receiverId: map['receiverId'] ?? '',
+      content: map['content'] ?? '',
+      // Safety check for Enum index
+      type: (map['type'] != null && map['type'] < MessageType.values.length)
+          ? MessageType.values[map['type']]
+          : MessageType.text,
+      // Firebase Timestamp ya ISO string dono ko handle karne ke liye
+      timestamp: map['timestamp'] != null
+          ? DateTime.tryParse(map['timestamp']) ?? DateTime.now()
+          : DateTime.now(),
       isSeen: map['isSeen'] ?? false,
+    );
+  }
+
+  // CopyWith Method: Jab message "Seen" mark karna ho toh ye kaam ayega
+  MessageModel copyWith({bool? isSeen}) {
+    return MessageModel(
+      id: id,
+      bookingId: bookingId,
+      senderId: senderId,
+      receiverId: receiverId,
+      content: content,
+      type: type,
+      timestamp: timestamp,
+      isSeen: isSeen ?? this.isSeen,
     );
   }
 }
