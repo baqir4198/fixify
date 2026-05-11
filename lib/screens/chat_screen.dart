@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/models/message_model.dart';
+import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
@@ -71,7 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  // --- Sending Logic ---
+  // --- SENDING LOGIC (Synced with Model) ---
   void _handleSend() async {
     String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
     String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
@@ -85,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } else if (_messageController.text.trim().isNotEmpty) {
       String content = _messageController.text.trim();
-      _messageController.clear(); // Clear UI immediately for better UX
+      _messageController.clear();
       _sendMessageToSupabase(content, MessageType.text, sId, rId);
     }
   }
@@ -113,13 +114,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessageToSupabase(String content, MessageType type, String sId, String rId) async {
+    // Sync with MessageModel.toMap()
     final messageData = {
       'booking_id': widget.booking.id,
       'sender_id': sId,
       'receiver_id': rId,
       'content': content,
-      'type': type.toString().split('.').last,
-      'timestamp': DateTime.now().toIso8601String(),
+      'message_type': type.index, // Sending int as per model
+      'created_at': DateTime.now().toIso8601String(), // Correct column name
       'is_seen': false,
     };
 
@@ -155,9 +157,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   .from('messages')
                   .stream(primaryKey: ['id'])
                   .eq('booking_id', widget.booking.id)
-                  .order('timestamp', ascending: false),
+                  .order('created_at', ascending: false), // Using created_at for order
               builder: (context, snapshot) {
-                if (snapshot.hasError) return Center(child: Text("Error loading messages"));
+                if (snapshot.hasError) {
+                  return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10)));
+                }
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
                 final messages = snapshot.data!
@@ -187,6 +191,9 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // ... [Baaki saara UI code jo aapne bheja tha wo same rahega]
+  // _buildAppBar, _buildMessageBubble, _buildMessageContent, _buildTimeRow, _buildChatInput, _showPickerMenu, _pickMedia, _startRecording ko end tak paste kar lein.
+
   AppBar _buildAppBar() {
     String name = widget.isProvider ? widget.booking.customerName : widget.booking.provider.name;
     return AppBar(
@@ -215,8 +222,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(MessageModel msg, bool isMe) {
-    bool isImage = msg.type == MessageType.text && msg.content.startsWith('http') &&
-        (msg.content.toLowerCase().contains('.jpg') || msg.content.toLowerCase().contains('.png') || msg.content.toLowerCase().contains('.jpeg'));
+    bool isImage = msg.type == MessageType.image ||
+        (msg.type == MessageType.text && msg.content.startsWith('http') &&
+            (msg.content.toLowerCase().contains('.jpg') || msg.content.toLowerCase().contains('.png')));
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -378,7 +386,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (image != null) {
       String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
       String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
-      _uploadAndSendMedia(File(image.path), MessageType.text, sId, rId);
+      _uploadAndSendMedia(File(image.path), MessageType.image, sId, rId);
     }
   }
 
