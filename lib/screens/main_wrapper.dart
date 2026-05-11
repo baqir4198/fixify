@@ -3,7 +3,7 @@ import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/home_screen.dart';
 import 'package:handyman_app/screens/profile_screen.dart';
 import 'package:handyman_app/screens/messages_list_screen.dart';
-import 'my_bookings_screen.dart'; // Inbox import
+import 'my_bookings_screen.dart';
 
 class MainWrapper extends StatefulWidget {
   final ProviderModel user;
@@ -15,15 +15,12 @@ class MainWrapper extends StatefulWidget {
 
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
-  late List<Widget> _pages;
 
-  @override
-  void initState() {
-    super.initState();
-    _pages = [
+  // Pages ko list ke bajaye function se lein taake data hamesha fresh rahe
+  List<Widget> _getPages() {
+    return [
       HomeScreen(user: widget.user),
       const MyBookingsScreen(),
-      // Inbox page add kar di (Is mein providerId ya userId pass karein)
       MessagesListScreen(providerId: widget.user.id),
       ProfileScreen(user: widget.user),
     ];
@@ -31,54 +28,60 @@ class _MainWrapperState extends State<MainWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    // build ke andar pages ko call karein
+    final pages = _getPages();
+
     return Scaffold(
-      // IndexedStack best hai state preserve karne ke liye
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
+          color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 15,
+              offset: const Offset(0, -2),
             ),
           ],
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           selectedItemColor: Colors.blueAccent,
-          unselectedItemColor: Colors.grey[400],
+          unselectedItemColor: Colors.blueGrey.shade300,
           showSelectedLabels: true,
           showUnselectedLabels: true,
-          selectedFontSize: 12,
-          unselectedFontSize: 12,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
           elevation: 0,
-          items: [
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.explore_outlined, size: 26),
+              activeIcon: Icon(Icons.explore, size: 26),
               label: "Explore",
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today_outlined),
-              activeIcon: Icon(Icons.calendar_today),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_month_outlined, size: 26),
+              activeIcon: Icon(Icons.calendar_month, size: 26),
               label: "Bookings",
             ),
-            // Message Tab with Badge (Optional logic baad mein dal sakte hain)
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              activeIcon: Icon(Icons.chat_bubble_rounded),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline_rounded, size: 26),
+              activeIcon: Icon(Icons.chat_bubble_rounded, size: 26),
               label: "Messages",
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline_rounded, size: 26),
+              activeIcon: Icon(Icons.person_rounded, size: 26),
               label: 'Profile',
             ),
           ],

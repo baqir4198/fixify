@@ -1,115 +1,104 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/booking_model.dart';
 import '../models/provider_model.dart';
 import '../models/message_model.dart';
 
 class StorageService {
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static final SupabaseClient _supabase = Supabase.instance.client;
 
   // ================= PROVIDER LOGIC =================
   static Future<void> saveProvider(ProviderModel provider) async {
-    await _db.collection('users').doc(provider.id).set(provider.toMap());
+    try {
+      await _supabase.from('users').upsert(provider.toMap());
+    } catch (e) {
+      print("Error saving provider: $e");
+      rethrow;
+    }
   }
 
   static Stream<List<ProviderModel>> getProvidersStream() {
-    return _db.collection('users')
-        .where('profession', isNotEqualTo: 'Customer')
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => ProviderModel.fromMap(doc.data()))
-        .toList());
+    return _supabase
+        .from('users')
+        .stream(primaryKey: ['id'])
+        .neq('profession', 'Customer')
+        .map((data) => data.map((map) => ProviderModel.fromMap(map)).toList());
   }
 
   // ================= BOOKING LOGIC =================
   static Future<void> saveBooking(BookingModel booking) async {
-    await _db.collection('bookings').doc(booking.id).set(booking.toMap());
-    await sendAutoWelcomeMessage(booking);
+    try {
+      // 1. Insert and get back the new row with UUID
+      final response = await _supabase
+          .from('bookings')
+          .insert(booking.toMap())
+          .select()
+          .single();
+
+      final savedBooking = BookingModel.fromMap(response);
+
+      // 2. Auto welcome message
+      await sendAutoWelcomeMessage(savedBooking);
+    } catch (e) {
+      print("SAVE BOOKING ERROR: $e");
+      rethrow;
+    }
   }
 
   static Stream<List<BookingModel>> getBookingsStream(String userId, bool isProvider) {
-    return _db.collection('bookings')
-        .where(isProvider ? 'provider.id' : 'customerId', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => BookingModel.fromMap(doc.data(), docId: doc.id))
-        .toList());
-  }
+    final column = isProvider ? 'provider_id' : 'customer_id';
 
-  static Stream<List<BookingModel>> getUserBookingsStream(String userId) {
-    return getBookingsStream(userId, false);
+    return _supabase
+        .from('bookings')
+        .stream(primaryKey: ['id'])
+        .eq(column, userId)
+        .order('booking_date', ascending: false)
+        .map((data) => data.map((map) => BookingModel.fromMap(map)).toList());
   }
 
   static Future<void> updateBookingStatus(String id, String newStatus) async {
-    await _db.collection('bookings').doc(id).update({'status': newStatus});
-  }
-
-  static Future<void> deleteBooking(String id) async {
-    await deleteFullConversation(id);
-    await _db.collection('bookings').doc(id).delete();
+    try {
+      await _supabase.from('bookings').update({'status': newStatus}).eq('id', id);
+    } catch (e) {
+      print("Update Status Error: $e");
+      rethrow;
+    }
   }
 
   // ================= CHAT LOGIC =================
-  static Stream<List<BookingModel>> getProviderChatsStream(String userId) {
-    return getBookingsStream(userId, true);
-  }
-
   static Future<void> sendMessage(MessageModel message) async {
-    // Har message ko booking ke andar 'messages' sub-collection mein save karna
-    await _db.collection('bookings')
-        .doc(message.bookingId)
-        .collection('messages')
-        .add(message.toMap());
+    try {
+      final messageData = message.toMap();
+      messageData.remove('id'); // ID remove ki taake Supabase UUID banaye
+      await _supabase.from('messages').insert(messageData);
+    } catch (e) {
+      print("Send Message Error: $e");
+      rethrow;
+    }
   }
 
   static Stream<List<MessageModel>> getChatStream(String bookingId) {
-    return _db.collection('bookings')
-        .doc(bookingId)
-        .collection('messages')
-        .orderBy('timestamp', descending: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => MessageModel.fromMap(doc.data(), docId: doc.id))
-        .toList());
-  }
-
-  static Future<void> deleteFullConversation(String bookingId) async {
-    var messages = await _db.collection('bookings')
-        .doc(bookingId)
-        .collection('messages')
-        .get();
-
-    for (var doc in messages.docs) {
-      await doc.reference.delete();
-    }
+    return _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('booking_id', bookingId)
+        .order('timestamp', ascending: true)
+        .map((data) => data.map((map) => MessageModel.fromMap(map)).toList());
   }
 
   static Future<void> sendAutoWelcomeMessage(BookingModel booking) async {
-    final autoMsg = MessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      bookingId: booking.id,
-      senderId: booking.customerId,
-      receiverId: booking.provider.id,
-      content: "Hi ${booking.provider.name}, I have booked your service for ${booking.date}. Let's discuss!",
-      timestamp: DateTime.now(),
-      type: MessageType.text, // Ensure enum type is passed
-    );
-    await sendMessage(autoMsg);
-  }
-
-  // FIX: currentUserId add kiya gaya hai taake sirf wahi messages "seen" hon jo receiver ke hon
-  static Future<void> markAsSeen(String bookingId, String currentUserId) async {
-    var query = await _db.collection('bookings')
-        .doc(bookingId)
-        .collection('messages')
-        .where('receiverId', isEqualTo: currentUserId)
-        .where('isSeen', isEqualTo: false)
-        .get();
-
-    WriteBatch batch = _db.batch();
-    for (var doc in query.docs) {
-      batch.update(doc.reference, {'isSeen': true});
+    try {
+      final autoMsg = MessageModel(
+        id: '', // Empty rakha
+        bookingId: booking.id, // Ab ye sahi UUID hai
+        senderId: booking.customerId,
+        receiverId: booking.provider.id,
+        content: "Hi ${booking.provider.name}, I have booked your service. Let's discuss!",
+        timestamp: DateTime.now(),
+        type: MessageType.text,
+      );
+      await sendMessage(autoMsg);
+    } catch (e) {
+      print("Auto Welcome Message Error: $e");
     }
-    await batch.commit(); // Batch use karne se performance behter hoti hai
   }
 }

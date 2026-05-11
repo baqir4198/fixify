@@ -13,27 +13,35 @@ class ServiceModel {
     required this.color,
   });
 
-  // --- FIREBASE INTEGRATION ---
+  // --- SUPABASE INTEGRATION ---
 
-  // Database mein bhejte waqt (Color ko Hex string aur Icon ko codePoint mein badalna)
+  // Database mein insert/update karne ke liye
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      // Supabase mein IDs aksar 'id' hi hoti hain (UUID ya BigInt)
       'name': name,
-      'iconCode': icon.codePoint, // Icon ka unique number
-      'colorHex': color.value,    // Color ka integer value
+      'icon_code': icon.codePoint, // Snake case use karein: icon_code
+      'color_hex': color.value,    // Snake case use karein: color_hex
     };
   }
 
-  // Database se wapas lete waqt
+  // Database se data fetch karne ke liye
   factory ServiceModel.fromMap(Map<String, dynamic> map) {
     return ServiceModel(
-      id: map['id'] ?? '',
+      // Supabase se ID hamesha check karein (kabhi int hoti hai kabhi UUID string)
+      id: map['id']?.toString() ?? '',
       name: map['name'] ?? '',
-      // CodePoint se wapas IconData banana
-      icon: IconData(map['iconCode'], fontFamily: 'MaterialIcons'),
-      // Integer value se wapas Color banana
-      color: Color(map['colorHex'] ?? 0xFF42A5F5),
+
+      // Icon handling
+      icon: IconData(
+        map['icon_code'] ?? 58315, // Default icon code agar null ho
+        fontFamily: 'MaterialIcons',
+      ),
+
+      // Color handling
+      // Supabase se integer value kabhi kabhi double ya string mein cast ho jati hai
+      // isliye .toInt() safety ke liye behtar hai
+      color: Color(int.parse(map['color_hex'].toString())),
     );
   }
 }

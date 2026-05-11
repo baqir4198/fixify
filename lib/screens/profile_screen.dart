@@ -1,14 +1,15 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import '../models/booking_model.dart';
 import 'become_provider_screen.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
+
+final supabase = Supabase.instance.client;
 
 class ProfileScreen extends StatefulWidget {
   final ProviderModel user;
@@ -28,7 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     currentUser = widget.user;
   }
 
-  // --- Image Pick & Upload Logic ---
+  // --- Supabase Image Upload Logic ---
   Future<void> _updateProfileImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
@@ -37,17 +38,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isUploading = true);
 
       try {
-        // Note: Yahan aap Firebase Storage use kar sakte hain, filhal path update kar rahe hain
-        // Professional tareeqa ye hai ke image Firebase Storage pe upload ho aur uska URL aaye.
-        String newImageUrl = image.path;
+        final file = File(image.path);
+        final fileExt = image.path.split('.').last;
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+        final filePath = 'profile_pics/$fileName';
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.id)
-            .update({'imageUrl': newImageUrl});
+        // 1. Upload to Supabase Storage (profiles bucket)
+        await supabase.storage.from('profiles').upload(filePath, file);
+
+        // 2. Get Public URL
+        final String publicUrl = supabase.storage.from('profiles').getPublicUrl(filePath);
+
+        // 3. Update Database
+        await supabase
+            .from('users')
+            .update({'imageUrl': publicUrl})
+            .eq('id', currentUser.id);
 
         setState(() {
-          currentUser.imageUrl = newImageUrl;
+          currentUser.imageUrl = publicUrl;
           _isUploading = false;
         });
 
@@ -56,14 +65,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } catch (e) {
         setState(() => _isUploading = false);
         debugPrint("Upload Error: $e");
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    String userInitial = currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : "?";
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -75,20 +83,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.red),
             onPressed: () async {
-              await FirebaseAuth.instance.signOut();
+              await supabase.auth.signOut();
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (r) => false);
             },
           )
         ],
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        // Firestore se live data suno taake Edit Profile ke baad khud refresh ho jaye
-        stream: FirebaseFirestore.instance.collection('users').doc(currentUser.id).snapshots(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        // Supabase Real-time stream for user profile
+        stream: supabase.from('users').stream(primaryKey: ['id']).eq('id', currentUser.id),
         builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data!.exists) {
-            currentUser = ProviderModel.fromMap(snapshot.data!.data() as Map<String, dynamic>);
+          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+            currentUser = ProviderModel.fromMap(snapshot.data!.first);
           }
+
+          String userInitial = currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : "?";
 
           return SingleChildScrollView(
             child: Column(
@@ -106,9 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               radius: 55,
                               backgroundColor: Colors.blue.shade100,
                               backgroundImage: (currentUser.imageUrl.isNotEmpty)
-                                  ? (currentUser.imageUrl.startsWith('http')
                                   ? NetworkImage(currentUser.imageUrl)
-                                  : FileImage(File(currentUser.imageUrl)) as ImageProvider)
                                   : null,
                               child: (currentUser.imageUrl.isEmpty && !_isUploading)
                                   ? Text(userInitial, style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue.shade800))
@@ -130,7 +138,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // Stats Section (Live from Firestore)
+                // Stats Section (Live from Supabase via StorageService)
                 StreamBuilder<List<BookingModel>>(
                     stream: StorageService.getBookingsStream(currentUser.id, false),
                     builder: (context, bookingSnap) {
@@ -168,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
 
-                // Become Provider Button (Only for Customers)
+                // Become Provider Button
                 if (currentUser.profession == "Customer")
                   Padding(
                     padding: const EdgeInsets.all(20),

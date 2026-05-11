@@ -1,4 +1,4 @@
-enum MessageType { text, audio, video, image } // Maine 'image' bhi add kar diya hai future ke liye
+enum MessageType { text, audio, video, image }
 
 class MessageModel {
   final String id;
@@ -21,39 +21,43 @@ class MessageModel {
     this.isSeen = false,
   });
 
+  // --- SUPABASE MEIN SAVE KARNE KE LIYE ---
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'bookingId': bookingId,
-      'senderId': senderId,
-      'receiverId': receiverId,
+      // 'id' hum aksar omit kar dete hain agar Supabase UUID generate kar raha ho
+      'booking_id': bookingId,
+      'sender_id': senderId,
+      'receiver_id': receiverId,
       'content': content,
-      'type': type.index,
-      'timestamp': timestamp.toIso8601String(),
-      'isSeen': isSeen,
+      'message_type': type.index, // 'type' reserved word ho sakta hai SQL mein
+      'created_at': timestamp.toIso8601String(), // Standard Supabase naming
+      'is_seen': isSeen,
     };
   }
 
+  // --- SUPABASE SE DATA LENE KE LIYE ---
   factory MessageModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return MessageModel(
-      id: docId ?? (map['id'] ?? ''),
-      bookingId: map['bookingId'] ?? '',
-      senderId: map['senderId'] ?? '',
-      receiverId: map['receiverId'] ?? '',
-      content: map['content'] ?? '',
-      // Safety check for Enum index
-      type: (map['type'] != null && map['type'] < MessageType.values.length)
-          ? MessageType.values[map['type']]
+      id: docId ?? (map['id']?.toString() ?? ''),
+      bookingId: map['booking_id']?.toString() ?? '',
+      senderId: map['sender_id']?.toString() ?? '',
+      receiverId: map['receiver_id']?.toString() ?? '',
+      content: map['content']?.toString() ?? '',
+
+      // Enum Safety: Supabase se index int ki tarah aata hai
+      type: (map['message_type'] != null && map['message_type'] < MessageType.values.length)
+          ? MessageType.values[map['message_type']]
           : MessageType.text,
-      // Firebase Timestamp ya ISO string dono ko handle karne ke liye
-      timestamp: map['timestamp'] != null
-          ? DateTime.tryParse(map['timestamp']) ?? DateTime.now()
+
+      // Supabase hamesha ISO8601 String bhejta hai
+      timestamp: map['created_at'] != null
+          ? DateTime.parse(map['created_at'])
           : DateTime.now(),
-      isSeen: map['isSeen'] ?? false,
+
+      isSeen: map['is_seen'] ?? false,
     );
   }
 
-  // CopyWith Method: Jab message "Seen" mark karna ho toh ye kaam ayega
   MessageModel copyWith({bool? isSeen}) {
     return MessageModel(
       id: id,

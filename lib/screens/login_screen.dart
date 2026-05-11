@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
 import 'package:handyman_app/screens/sign_up_screen.dart';
+import 'package:handyman_app/screens/provider_dashboard.dart'; // Isay lazmi import rakhein
 import 'package:google_fonts/google_fonts.dart';
-
-// Note: ProviderDashboard ka import agar aapke paas file hai toh rehne dein
-// import 'package:handyman_app/screens/provider_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,10 +16,11 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final supabase = Supabase.instance.client;
 
   bool _isLoading = false;
-  bool _isPasswordVisible = false; // Password toggle ke liye
-  String userRole = "Customer"; // Default role
+  bool _isPasswordVisible = false;
+  String userRole = "Customer"; // UI Toggle ke liye
 
   @override
   void dispose() {
@@ -31,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // --- FIX: Mukammal Login aur Role-Based Navigation Logic ---
   void _handleLogin() async {
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
@@ -43,61 +42,55 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Firebase Auth Login
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
+      // 1. Supabase Auth Login
+      final AuthResponse res = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
 
-      String uid = userCredential.user!.uid;
+      final User? user = res.user;
+      if (user == null) throw "Login failed. Please try again.";
 
-      // 2. Firestore se User ka Data nikalna
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      // 2. Database se user ka profile fetch karna (Sahi columns ke sath)
+      final userData = await supabase
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .single();
 
-      if (!userDoc.exists || userDoc.data() == null) {
-        throw "User record not found in database!";
-      }
-
-      // 3. Map ko Model mein convert karna (Safely)
-      final userData = userDoc.data() as Map<String, dynamic>;
-      final matchingUser = ProviderModel.fromMap(userData, docId: uid);
+      // 3. Map ko Model mein convert karna
+      final matchingUser = ProviderModel.fromMap(userData, docId: user.id);
 
       if (!mounted) return;
 
-      // 4. Role Based Validation
-      // Customer login kar raha hai lekin database mein wo 'Provider' hai
-      if (userRole == "Customer" && (userData['profession'] != "Customer" && userData['profession'] != null)) {
-        await FirebaseAuth.instance.signOut();
-        throw "This account is registered as a Provider. Please login as Provider.";
+      // 4. Role Validation logic
+      // Database mein store kiya gaya role (Jo humne Registration mein add kiya tha)
+      String dbRole = userData['role'] ?? (userData['profession'] == "Customer" ? "Customer" : "Provider");
+
+      // Check karein ke jo switch UI mein select hai, wahi database mein hai ya nahi
+      if (userRole != dbRole) {
+        await supabase.auth.signOut(); // Account switch ki wajah se sign out zaroori hai
+        throw "This account is a $dbRole. Please select '$dbRole' option above.";
       }
 
-      // Provider login kar raha hai lekin database mein wo 'Customer' hai
-      if (userRole == "Provider" && userData['profession'] == "Customer") {
-        await FirebaseAuth.instance.signOut();
-        throw "This account is registered as a Customer. Please login as Customer.";
-      }
-
-      // 5. Success Navigation (Passing the 'user' object)
-      if (userRole == "Provider") {
-        // Agar aapne ProviderDashboard banayi hai toh wahan bhejain
-        /* Navigator.pushReplacement(
+      // 5. Success Navigation (AB SAHI DASHBOARD KHULEGA)
+      if (dbRole == "Provider") {
+        Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => ProviderDashboard(provider: matchingUser))
-        ); */
-        _showError("Provider Dashboard is under development");
+        );
       } else {
-        // YAHAN HUM 'user' PASS KAR RHE HAIN JO ERROR FIX KAREGA
         Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => MainWrapper(user: matchingUser))
         );
       }
 
-    } on FirebaseAuthException catch (e) {
-      _showError(e.message ?? "Authentication Failed");
+    } on AuthException catch (e) {
+      _showError(e.message);
     } catch (e) {
-      _showError(e.toString());
+      String cleanError = e.toString().replaceAll("Exception:", "").replaceAll("String:", "");
+      _showError(cleanError);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -109,6 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Text(msg),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -133,8 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: GoogleFonts.inter(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 40),
-
-              // Role Selector
+              // Role Switcher
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16)),
@@ -146,23 +139,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 35),
-
-              // Email Input
               _buildTextField(
                 controller: _emailController,
                 hint: "Email Address",
                 icon: Icons.email_outlined,
               ),
               const SizedBox(height: 20),
-
-              // Password Input with Visibility Toggle
               _buildTextField(
                 controller: _passwordController,
                 hint: "Password",
                 icon: Icons.lock_outline,
                 isPassword: true,
               ),
-
               const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
@@ -171,10 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text("Forgot Password?", style: TextStyle(color: Colors.blue)),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // Login Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -186,17 +171,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     elevation: 0,
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Text(
                     "Login",
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-
               const SizedBox(height: 40),
-
-              // Sign Up Link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -239,10 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
         hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
         filled: true,
         fillColor: Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: Colors.grey.shade200),
@@ -261,9 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: isSelected
-                ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
-                : null,
+            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)] : null,
           ),
           alignment: Alignment.center,
           child: Text(

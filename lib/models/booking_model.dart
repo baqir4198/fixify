@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'package:handyman_app/models/provider_model.dart';
+import 'provider_model.dart';
 
 class BookingModel {
   final String id;
@@ -10,7 +9,7 @@ class BookingModel {
   final String time;
   final String serviceName;
   final String price;
-  String status;
+  final String status;
 
   BookingModel({
     required this.id,
@@ -21,58 +20,37 @@ class BookingModel {
     required this.time,
     required this.serviceName,
     required this.price,
-    this.status = 'Pending',
+    required this.status,
   });
 
-  // Data Firebase bhejte waqt
+  // Supabase/JSON se data nikalne ke liye
+  factory BookingModel.fromMap(Map<String, dynamic> map) {
+    return BookingModel(
+      id: map['id'] ?? '',
+      provider: ProviderModel.fromMap(map['provider_data'] ?? {}),
+      customerName: map['customer_name'] ?? '',
+      customerId: map['customer_id'] ?? '',
+      date: DateTime.parse(map['booking_date']),
+      time: map['booking_time'] ?? '',
+      serviceName: map['service_name'] ?? '',
+      price: map['price'] ?? '0',
+      status: map['status'] ?? 'Pending',
+    );
+  }
+
+  // Database mein save karne ke liye
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'provider': provider.toMap(),
-      'customerName': customerName,
-      'customerId': customerId,
-      'date': date.toIso8601String(), // Standard format for flexibility
-      'time': time,
-      'serviceName': serviceName,
+      'customer_name': customerName,
+      'customer_id': customerId,
+      'booking_date': date.toIso8601String(),
+      'booking_time': time,
+      'service_name': serviceName,
       'price': price,
       'status': status,
+      'provider_id': provider.id,
+      // Provider ki basic details save karna zaroori hota hai history ke liye
+      'provider_data': provider.toMap(),
     };
-  }
-
-  // Data Firebase se lete waqt
-  factory BookingModel.fromMap(Map<String, dynamic> map, {String? docId}) {
-    return BookingModel(
-      // Agar Firebase ki doc ID alag se pass ho toh wo use karein
-      id: docId ?? (map['id']?.toString() ?? ''),
-      provider: ProviderModel.fromMap(map['provider'] ?? {}),
-      customerName: map['customerName'] ?? 'Unknown Customer',
-      customerId: map['customerId'] ?? '',
-      // Parsing logic for ISO string or safety fallback
-      date: map['date'] != null
-          ? DateTime.tryParse(map['date']) ?? DateTime.now()
-          : DateTime.now(),
-      time: map['time']?.toString() ?? '00:00',
-      serviceName: map['serviceName'] ?? 'General Service',
-      price: map['price']?.toString() ?? '0',
-      status: map['status']?.toString() ?? 'Pending',
-    );
-  }
-
-  factory BookingModel.fromJson(String source) => BookingModel.fromMap(json.decode(source));
-  String toJson() => json.encode(toMap());
-
-  // CopyWith Method (Status update karne ke liye best hai bina poora object dobara banaye)
-  BookingModel copyWith({String? status}) {
-    return BookingModel(
-      id: id,
-      provider: provider,
-      customerName: customerName,
-      customerId: customerId,
-      date: date,
-      time: time,
-      serviceName: serviceName,
-      price: price,
-      status: status ?? this.status,
-    );
   }
 }

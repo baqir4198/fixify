@@ -4,72 +4,85 @@ class ProviderModel {
   final String id;
   final String name;
   final String email;
-  final String password;
   final String profession;
   double rating;
   final double pricePerHour;
-  String imageUrl; // Profile Picture
-  final String cnicUrl;   // Verification Image
-  final String about;
+  String imageUrl;
+  final String cnicUrl;
+  final String bio; // 'about' ko 'bio' kar diya hai consistency ke liye
 
   ProviderModel({
     required this.id,
     required this.name,
     required this.email,
-    required this.password,
     required this.profession,
     required this.rating,
     required this.pricePerHour,
     required this.imageUrl,
     required this.cnicUrl,
-    required this.about,
+    required this.bio,
   });
 
-  // --- FIREBASE SE DATA LENE KE LIYE ---
+  // --- SUPABASE SE DATA LENE KE LIYE ---
   factory ProviderModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return ProviderModel(
-      // Agar Firestore ki auto-generated ID pass ho toh wo use karein, warna map se
       id: docId ?? (map['id']?.toString() ?? ''),
       name: map['name']?.toString() ?? 'Unknown User',
       email: map['email']?.toString() ?? '',
-      password: map['password']?.toString() ?? '',
-      profession: map['profession']?.toString() ?? 'Customer', // Default role
-
-      // Safety for double values
+      profession: map['profession']?.toString() ?? 'Customer',
       rating: _toDouble(map['rating']),
-      pricePerHour: _toDouble(map['pricePerHour']),
-
-      imageUrl: map['imageUrl']?.toString() ?? 'https://via.placeholder.com/150',
-      cnicUrl: map['cnicUrl']?.toString() ?? '',
-      about: map['about']?.toString() ?? 'No description provided.',
+      pricePerHour: _toDouble(map['price_per_hour']),
+      imageUrl: map['image_url']?.toString() ?? 'https://via.placeholder.com/150',
+      cnicUrl: map['cnic_url']?.toString() ?? '',
+      bio: map['bio']?.toString() ?? (map['about']?.toString() ?? 'No description provided.'),
     );
   }
 
-  // --- FIREBASE MEIN SAVE KARNE KE LIYE ---
+  // --- SUPABASE MEIN SAVE/UPDATE KARNE KE LIYE ---
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      'id': id, // Auth user ID yahan se jayegi
       'name': name,
       'email': email,
-      'password': password,
       'profession': profession,
       'rating': rating,
-      'pricePerHour': pricePerHour,
-      'imageUrl': imageUrl,
-      'cnicUrl': cnicUrl,
-      'about': about,
-      'updatedAt': DateTime.now().toIso8601String(), // Update time track karne ke liye
+      'price_per_hour': pricePerHour,
+      'image_url': imageUrl,
+      'cnic_url': cnicUrl,
+      'bio': bio,
+      'updated_at': DateTime.now().toIso8601String(),
     };
   }
 
-  // Helper function taake double conversion mein error na aaye
   static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
     if (value is int) return value.toDouble();
     if (value is double) return value;
+    if (value is String) return double.tryParse(value) ?? 0.0;
     return 0.0;
   }
 
-  // JSON conversion (Storage ke liye useful hai)
+  // Helper method: User profile update karte waqt kaam aata hai
+  ProviderModel copyWith({
+    String? name,
+    String? imageUrl,
+    String? bio,
+    double? pricePerHour,
+    String? profession,
+  }) {
+    return ProviderModel(
+      id: id,
+      name: name ?? this.name,
+      email: email,
+      profession: profession ?? this.profession,
+      rating: rating,
+      pricePerHour: pricePerHour ?? this.pricePerHour,
+      imageUrl: imageUrl ?? this.imageUrl,
+      cnicUrl: cnicUrl,
+      bio: bio ?? this.bio,
+    );
+  }
+
   String toJson() => json.encode(toMap());
   factory ProviderModel.fromJson(String source) => ProviderModel.fromMap(json.decode(source));
 }

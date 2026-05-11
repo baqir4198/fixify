@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
 import 'package:handyman_app/screens/provider_dashboard.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+final supabase = Supabase.instance.client;
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -22,7 +23,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
-  String userRole = "Customer";
+  String userRole = "Customer"; // Default role
   String selectedCategory = "Cleaning";
   final List<String> categories = ["Cleaning", "Plumbing", "Electrician", "Painter", "Carpenter", "AC Repair"];
 
@@ -30,10 +31,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _cnicImage;
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _costController.dispose();
+    super.dispose();
+  }
+
   Future<void> _pickImage(bool isProfile) async {
     final pickedFile = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      imageQuality: 50, // Size thora kam rakhein ge taake upload teiz ho
+      imageQuality: 50,
     );
     if (pickedFile != null) {
       setState(() {
@@ -46,21 +57,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  Future<String> _uploadToSupabase(File file, String bucket, String fileName) async {
+    try {
+      final bytes = await file.readAsBytes();
+      await supabase.storage.from(bucket).uploadBinary(
+        fileName,
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+      );
+
+      if (bucket == 'profiles') {
+        return supabase.storage.from(bucket).getPublicUrl(fileName);
+      } else {
+        return fileName;
+      }
+    } catch (e) {
+      debugPrint("Upload Error in $bucket: $e");
+      return "";
+    }
+  }
+
   void _handleSignUp() async {
     String name = _nameController.text.trim();
     String email = _emailController.text.trim().toLowerCase();
     String password = _passwordController.text.trim();
+    String currentRole = userRole;
 
-    // Validations
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       _showError("Please fill all fields!");
+      return;
+    }
+    if (password.length < 6) {
+      _showError("Password should be at least 6 characters.");
       return;
     }
     if (password != _confirmPasswordController.text.trim()) {
       _showError("Passwords do not match!");
       return;
     }
-    if (userRole == "Provider" && _cnicImage == null) {
+    if (currentRole == "Provider" && _cnicImage == null) {
       _showError("Please upload CNIC photo for verification!");
       return;
     }
@@ -68,183 +103,186 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Create Firebase Auth Account
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      // 1. Auth Creation with Metadata
+      final AuthResponse res = await supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': name, 'role': currentRole},
+      );
 
-      String uid = userCredential.user!.uid;
+      final String? uid = res.user?.id;
+      if (uid == null) throw "User registration failed!";
+
       String profileUrl = "";
       String cnicUrl = "";
 
-      // 2. Upload Profile Picture (DP) if exists
+      // 2. Parallel Images Upload
       if (_profileImage != null) {
-        var ref = FirebaseStorage.instance.ref().child("profiles/$uid.jpg");
-        await ref.putFile(_profileImage!);
-        profileUrl = await ref.getDownloadURL();
+        profileUrl = await _uploadToSupabase(_profileImage!, 'profiles', '$uid-profile.jpg');
       }
 
-      // 3. Upload CNIC Image if Provider
-      if (userRole == "Provider" && _cnicImage != null) {
-        var ref = FirebaseStorage.instance.ref().child("cnics/$uid.jpg");
-        await ref.putFile(_cnicImage!);
-        cnicUrl = await ref.getDownloadURL();
+      if (currentRole == "Provider" && _cnicImage != null) {
+        cnicUrl = await _uploadToSupabase(_cnicImage!, 'cnics', '$uid-cnic.jpg');
       }
 
-      // 4. Prepare User Data
+      // 3. Prepare User Object (Updated with 'bio')
       final newUser = ProviderModel(
         id: uid,
         name: name,
         email: email,
-        password: "", // Security ke liye khali
-        profession: userRole == "Provider" ? selectedCategory : "Customer",
-        pricePerHour: userRole == "Provider" ? (double.tryParse(_costController.text.trim()) ?? 0.0) : 0.0,
-        rating: userRole == "Provider" ? 5.0 : 0.0,
-        imageUrl: profileUrl, // DP
-        cnicUrl: cnicUrl,    // New field for verification
-        about: userRole == "Provider" ? "Professional $selectedCategory provider." : "Customer",
+        profession: currentRole == "Provider" ? selectedCategory : "Customer",
+        pricePerHour: currentRole == "Provider" ? (double.tryParse(_costController.text.trim()) ?? 0.0) : 0.0,
+        rating: 5.0,
+        imageUrl: profileUrl,
+        cnicUrl: cnicUrl,
+        bio: currentRole == "Provider" ? "Professional $selectedCategory provider." : "Customer Account",
       );
 
-      // 5. Save to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(newUser.toMap());
+      // 4. Save to Database with Role Column
+      final Map<String, dynamic> dataToInsert = newUser.toMap();
+      dataToInsert['role'] = currentRole;
+
+      await supabase.from('users').upsert(dataToInsert);
 
       if (!mounted) return;
 
-      // 6. Navigation
-      if (userRole == "Provider") {
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => ProviderDashboard(provider: newUser)), (route) => false);
+      // 5. Logic-Based Navigation
+      if (currentRole == "Provider") {
+        Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => ProviderDashboard(provider: newUser)),
+                (route) => false
+        );
       } else {
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => MainWrapper(user: newUser)), (route) => false);
+        Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => MainWrapper(user: newUser)),
+                (route) => false
+        );
       }
 
-    } on FirebaseAuthException catch (e) {
-      _showError(e.message ?? "Registration Failed");
+    } on AuthException catch (e) {
+      _showError(e.message);
     } catch (e) {
-      _showError("Something went wrong: $e");
+      _showError("Unexpected Error: $e");
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: Colors.redAccent,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     bool isProvider = userRole == "Provider";
-
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, leading: const BackButton(color: Colors.black)),
+      appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: const BackButton(color: Colors.black)
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Create Account", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 32)),
-              const SizedBox(height: 25),
-
-              // --- DP SELECTION ---
-              Center(
-                child: GestureDetector(
-                  onTap: () => _pickImage(true),
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 55,
-                        backgroundColor: Colors.blue[50],
-                        backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                        child: _profileImage == null ? Icon(Icons.person_add_alt_1, size: 45, color: Colors.blue[200]) : null,
-                      ),
-                      Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 18, backgroundColor: Colors.blue[700], child: const Icon(Icons.edit, size: 15, color: Colors.white))),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Role Selection
-              Row(children: [
-                _buildRoleOption("Customer", Icons.person_outline),
-                const SizedBox(width: 15),
-                _buildRoleOption("Provider", Icons.handyman_outlined),
-              ]),
-              const SizedBox(height: 25),
-
-              _buildTextField(_nameController, "Full Name", Icons.person_outline),
-              const SizedBox(height: 15),
-              _buildTextField(_emailController, "Email", Icons.email_outlined, isEmail: true),
-              const SizedBox(height: 15),
-
-              if (isProvider) ...[
-                // Category Dropdown
-                _buildCategoryDropdown(),
-                const SizedBox(height: 15),
-                _buildTextField(_costController, "Hourly Rate (Rs.)", Icons.payments_outlined, isNumber: true),
-                const SizedBox(height: 20),
-
-                // --- CNIC UPLOAD ---
-                const Text("CNIC / ID Card Photo (Required)", style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => _pickImage(false),
-                  child: Container(
-                    height: 150,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: Colors.grey.shade200),
+        padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Create Account", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 30)),
+            const SizedBox(height: 25),
+            Center(
+              child: GestureDetector(
+                onTap: () => _pickImage(true),
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.blue[50],
+                      backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                      child: _profileImage == null ? Icon(Icons.person_add, size: 40, color: Colors.blue[200]) : null,
                     ),
-                    child: _cnicImage == null
-                        ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate_outlined, size: 40, color: Colors.grey), Text("Upload ID Photo")])
-                        : ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(_cnicImage!, fit: BoxFit.cover)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-
-              _buildTextField(_passwordController, "Password", Icons.lock_outline, isObscure: true),
-              const SizedBox(height: 15),
-              _buildTextField(_confirmPasswordController, "Confirm Password", Icons.lock_reset, isObscure: true),
-              const SizedBox(height: 40),
-
-              SizedBox(
-                width: double.infinity,
-                height: 58,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  onPressed: _handleSignUp,
-                  child: const Text("Create Account", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 15, backgroundColor: Colors.blue[700], child: const Icon(Icons.camera_alt, size: 14, color: Colors.white))),
+                  ],
                 ),
               ),
-              const SizedBox(height: 30),
+            ),
+            const SizedBox(height: 30),
+            Row(children: [
+              _buildRoleOption("Customer", Icons.person_outline),
+              const SizedBox(width: 15),
+              _buildRoleOption("Provider", Icons.handyman_outlined),
+            ]),
+            const SizedBox(height: 25),
+            _buildTextField(_nameController, "Full Name", Icons.person_outline),
+            const SizedBox(height: 15),
+            _buildTextField(_emailController, "Email", Icons.email_outlined, isEmail: true),
+            const SizedBox(height: 15),
+            if (isProvider) ...[
+              _buildCategoryDropdown(),
+              const SizedBox(height: 15),
+              _buildTextField(_costController, "Hourly Rate (Rs.)", Icons.payments_outlined, isNumber: true),
+              const SizedBox(height: 20),
+              const Text("CNIC Photo (Private)", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => _pickImage(false),
+                child: Container(
+                  height: 140,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: _cnicImage == null
+                      ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: Colors.grey), Text("Upload ID Photo")])
+                      : ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(_cnicImage!, fit: BoxFit.cover)),
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
-          ),
+            _buildTextField(_passwordController, "Password", Icons.lock_outline, isObscure: true),
+            const SizedBox(height: 15),
+            _buildTextField(_confirmPasswordController, "Confirm Password", Icons.lock_reset, isObscure: true),
+            const SizedBox(height: 35),
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                onPressed: _handleSignUp,
+                child: const Text("Sign Up", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
         ),
       ),
     );
   }
 
-  // Reusable Widgets
   Widget _buildRoleOption(String role, IconData icon) {
     bool isSelected = userRole == role;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => userRole = role),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 15),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.grey[50],
+            color: isSelected ? Colors.blue[700] : Colors.grey[50],
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade200, width: 2),
           ),
           child: Column(children: [
-            Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
-            Text(role, style: TextStyle(color: isSelected ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
+            Icon(icon, color: isSelected ? Colors.white : Colors.grey),
+            const SizedBox(height: 4),
+            Text(role, style: TextStyle(color: isSelected ? Colors.white : Colors.grey, fontWeight: FontWeight.bold)),
           ]),
         ),
       ),

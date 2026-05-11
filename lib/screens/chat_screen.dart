@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/models/message_model.dart';
-import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
@@ -27,8 +27,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ImagePicker _picker = ImagePicker();
+  final supabase = Supabase.instance.client;
 
   bool _isRecording = false;
+  bool _isUploading = false;
   String? _currentlyPlayingPath;
   int _recordDuration = 0;
   Timer? _timer;
@@ -36,9 +38,16 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Screen khulne par messages ko "seen" mark karein
+    _markMessagesSeen();
+  }
+
+  void _markMessagesSeen() {
     String currentUserId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
-    StorageService.markAsSeen(widget.booking.id, currentUserId);
+    supabase.from('messages')
+        .update({'is_seen': true})
+        .eq('booking_id', widget.booking.id)
+        .neq('sender_id', currentUserId)
+        .then((_) => debugPrint("Messages marked as seen"));
   }
 
   @override
@@ -51,7 +60,6 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // --- Utility Functions ---
   void _startTimer() {
     setState(() => _recordDuration = 0);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) => setState(() => _recordDuration++));
@@ -65,51 +73,70 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // --- Sending Logic ---
   void _handleSend() async {
-    String senderId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
-    String receiverId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
+    String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
+    String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
 
     if (_isRecording) {
-      String durationStr = _formatDuration(_recordDuration);
       _timer?.cancel();
       final path = await _audioRecorder.stop();
       setState(() => _isRecording = false);
-      if (path != null) _sendToFirebase(path, MessageType.audio, duration: durationStr, sId: senderId, rId: receiverId);
+      if (path != null) {
+        _uploadAndSendMedia(File(path), MessageType.audio, sId, rId);
+      }
     } else if (_messageController.text.trim().isNotEmpty) {
-      _sendToFirebase(_messageController.text.trim(), MessageType.text, sId: senderId, rId: receiverId);
-      _messageController.clear();
+      String content = _messageController.text.trim();
+      _messageController.clear(); // Clear UI immediately for better UX
+      _sendMessageToSupabase(content, MessageType.text, sId, rId);
     }
   }
 
-  void _sendToFirebase(String content, MessageType type, {String? duration, required String sId, required String rId}) async {
-    // Agar audio hai toh path aur duration merge karein
-    String finalContent = type == MessageType.audio ? "$content|$duration" : content;
+  Future<void> _uploadAndSendMedia(File file, MessageType type, String sId, String rId) async {
+    setState(() => _isUploading = true);
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
+      final path = 'chats/${widget.booking.id}/$fileName';
 
-    final newMessage = MessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      bookingId: widget.booking.id,
-      senderId: sId,
-      receiverId: rId,
-      content: finalContent,
-      type: type,
-      timestamp: DateTime.now(),
-      isSeen: false,
-    );
+      await supabase.storage.from('chat_media').upload(path, file);
+      final String publicUrl = supabase.storage.from('chat_media').getPublicUrl(path);
 
-    // Firebase Service Call
-    await StorageService.sendMessage(newMessage);
+      String content = publicUrl;
+      if (type == MessageType.audio) {
+        content = "$publicUrl|${_formatDuration(_recordDuration)}";
+      }
+
+      _sendMessageToSupabase(content, type, sId, rId);
+    } catch (e) {
+      debugPrint("Upload Error: $e");
+    } finally {
+      setState(() => _isUploading = false);
+    }
   }
 
-  // --- Media Pickers ---
-  Future<void> _pickMedia(ImageSource source, {bool isVideo = false}) async {
-    final XFile? file = isVideo
-        ? await _picker.pickVideo(source: source)
-        : await _picker.pickImage(source: source);
+  void _sendMessageToSupabase(String content, MessageType type, String sId, String rId) async {
+    final messageData = {
+      'booking_id': widget.booking.id,
+      'sender_id': sId,
+      'receiver_id': rId,
+      'content': content,
+      'type': type.toString().split('.').last,
+      'timestamp': DateTime.now().toIso8601String(),
+      'is_seen': false,
+    };
 
-    if (file != null) {
-      String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
-      String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
-      _sendToFirebase(file.path, MessageType.text, sId: sId, rId: rId);
+    try {
+      await supabase.from('messages').insert(messageData);
+      _scrollDown();
+    } catch (e) {
+      debugPrint("ERROR sending message: $e");
     }
+  }
+
+  void _scrollDown() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      }
+    });
   }
 
   @override
@@ -121,17 +148,35 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: _buildAppBar(),
       body: Column(
         children: [
+          if (_isUploading) const LinearProgressIndicator(minHeight: 2, backgroundColor: Colors.white, color: Colors.blue),
           Expanded(
-            child: StreamBuilder<List<MessageModel>>(
-              stream: StorageService.getChatStream(widget.booking.id),
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: supabase
+                  .from('messages')
+                  .stream(primaryKey: ['id'])
+                  .eq('booking_id', widget.booking.id)
+                  .order('timestamp', ascending: false),
               builder: (context, snapshot) {
+                if (snapshot.hasError) return Center(child: Text("Error loading messages"));
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final messages = snapshot.data!.reversed.toList();
+
+                final messages = snapshot.data!
+                    .map((map) => MessageModel.fromMap(map))
+                    .toList();
+
+                if (messages.isEmpty) {
+                  return Center(child: Text("No messages yet", style: GoogleFonts.poppins(color: Colors.grey)));
+                }
+
                 return ListView.builder(
+                  controller: _scrollController,
                   reverse: true,
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length,
-                  itemBuilder: (context, index) => _buildMessageBubble(messages[index], messages[index].senderId == currentUserId),
+                  itemBuilder: (context, index) {
+                    final msg = messages[index];
+                    return _buildMessageBubble(msg, msg.senderId == currentUserId);
+                  },
                 );
               },
             ),
@@ -151,13 +196,17 @@ class _ChatScreenState extends State<ChatScreen> {
       titleSpacing: 0,
       title: Row(
         children: [
-          CircleAvatar(radius: 18, backgroundColor: Colors.blue.shade100, child: Text(name[0], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
+          CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.blue.shade100,
+              child: Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue))
+          ),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(name, style: GoogleFonts.poppins(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w600)),
-              const Text("Active Session", style: TextStyle(color: Colors.green, fontSize: 11)),
+              const Text("Active Chat", style: TextStyle(color: Colors.green, fontSize: 11)),
             ],
           ),
         ],
@@ -166,50 +215,55 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(MessageModel msg, bool isMe) {
+    bool isImage = msg.type == MessageType.text && msg.content.startsWith('http') &&
+        (msg.content.toLowerCase().contains('.jpg') || msg.content.toLowerCase().contains('.png') || msg.content.toLowerCase().contains('.jpeg'));
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        padding: isImage ? const EdgeInsets.all(4) : const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isMe ? Colors.blue : Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+          color: isMe ? Colors.blueAccent : Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(isMe ? 16 : 0),
             bottomRight: Radius.circular(isMe ? 0 : 16),
           ),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
         ),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        child: _buildMessageContent(msg, isMe),
+        child: _buildMessageContent(msg, isMe, isImage),
       ),
     );
   }
 
-  Widget _buildMessageContent(MessageModel msg, bool isMe) {
+  Widget _buildMessageContent(MessageModel msg, bool isMe, bool isImage) {
     final time = DateFormat('hh:mm a').format(msg.timestamp);
     final color = isMe ? Colors.white : Colors.black87;
 
-    // Check if it's an image path
-    if (msg.content.contains('.jpg') || msg.content.contains('.png')) {
+    if (isImage) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: msg.content.startsWith('http')
-                ? Image.network(msg.content)
-                : Image.file(File(msg.content)),
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(msg.content, fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) =>
+                loadingProgress == null ? child : const Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(strokeWidth: 2))),
           ),
-          const SizedBox(height: 4),
-          _buildTimeRow(time, isMe, msg.isSeen),
+          Padding(
+            padding: const EdgeInsets.all(4),
+            child: _buildTimeRow(time, isMe, msg.isSeen),
+          ),
         ],
       );
-    }
-    // Audio Message
-    else if (msg.type == MessageType.audio) {
-      bool isPlaying = _currentlyPlayingPath == msg.content.split('|')[0];
+    } else if (msg.type == MessageType.audio) {
+      String audioUrl = msg.content.split('|')[0];
+      String duration = msg.content.contains('|') ? msg.content.split('|')[1] : "00:00";
+      bool isPlaying = _currentlyPlayingPath == audioUrl;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -217,26 +271,29 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: color, size: 32),
+                icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: color, size: 35),
                 onPressed: () async {
-                  String path = msg.content.split('|')[0];
-                  if (isPlaying) { await _audioPlayer.pause(); setState(() => _currentlyPlayingPath = null); }
-                  else { await _audioPlayer.play(DeviceFileSource(path)); setState(() => _currentlyPlayingPath = path); }
+                  if (isPlaying) {
+                    await _audioPlayer.pause();
+                    setState(() => _currentlyPlayingPath = null);
+                  } else {
+                    await _audioPlayer.play(UrlSource(audioUrl));
+                    setState(() => _currentlyPlayingPath = audioUrl);
+                    _audioPlayer.onPlayerComplete.listen((event) => setState(() => _currentlyPlayingPath = null));
+                  }
                 },
               ),
-              Text(msg.content.split('|')[1], style: TextStyle(color: color, fontSize: 12)),
+              Text(duration, style: TextStyle(color: color, fontSize: 12)),
             ],
           ),
           _buildTimeRow(time, isMe, msg.isSeen),
         ],
       );
-    }
-    // Text Message
-    else {
+    } else {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(msg.content, style: GoogleFonts.inter(color: color, fontSize: 14)),
+          Text(msg.content, style: GoogleFonts.inter(color: color, fontSize: 14.5)),
           const SizedBox(height: 4),
           _buildTimeRow(time, isMe, msg.isSeen),
         ],
@@ -264,23 +321,35 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
-            IconButton(icon: const Icon(Icons.add_circle_outline, color: Colors.blue), onPressed: () => _showPickerMenu()),
+            IconButton(icon: const Icon(Icons.add_circle_outline, color: Colors.blueAccent), onPressed: _showPickerMenu),
             Expanded(
               child: Container(
                 decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(24)),
                 child: TextField(
                   controller: _messageController,
+                  onChanged: (val) => setState(() {}),
                   decoration: const InputDecoration(hintText: "Type a message...", border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 16)),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onLongPress: _startRecording,
-              onLongPressUp: _handleSend,
+              onTap: () {
+                if (_messageController.text.trim().isNotEmpty && !_isRecording) {
+                  _handleSend();
+                }
+              },
+              onLongPress: _messageController.text.isEmpty ? _startRecording : null,
+              onLongPressUp: () {
+                if (_isRecording) _handleSend();
+              },
               child: CircleAvatar(
-                backgroundColor: _isRecording ? Colors.red : Colors.blue,
-                child: Icon(_isRecording ? Icons.mic : (_messageController.text.isEmpty ? Icons.mic : Icons.send), color: Colors.white),
+                radius: 24,
+                backgroundColor: _isRecording ? Colors.red : Colors.blueAccent,
+                child: Icon(
+                  _isRecording ? Icons.mic : (_messageController.text.isEmpty ? Icons.mic : Icons.send),
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -292,20 +361,30 @@ class _ChatScreenState extends State<ChatScreen> {
   void _showPickerMenu() {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(leading: const Icon(Icons.camera_alt), title: const Text("Camera"), onTap: () => _pickMedia(ImageSource.camera)),
-          ListTile(leading: const Icon(Icons.image), title: const Text("Gallery"), onTap: () => _pickMedia(ImageSource.gallery)),
-          ListTile(leading: const Icon(Icons.videocam), title: const Text("Video"), onTap: () => _pickMedia(ImageSource.gallery, isVideo: true)),
+          ListTile(leading: const Icon(Icons.camera_alt, color: Colors.blue), title: const Text("Camera"), onTap: () { Navigator.pop(context); _pickMedia(ImageSource.camera); }),
+          ListTile(leading: const Icon(Icons.image, color: Colors.purple), title: const Text("Gallery"), onTap: () { Navigator.pop(context); _pickMedia(ImageSource.gallery); }),
+          const SizedBox(height: 10),
         ],
       ),
     );
   }
 
+  Future<void> _pickMedia(ImageSource source) async {
+    final XFile? image = await _picker.pickImage(source: source, imageQuality: 70);
+    if (image != null) {
+      String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
+      String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
+      _uploadAndSendMedia(File(image.path), MessageType.text, sId, rId);
+    }
+  }
+
   Future<void> _startRecording() async {
     if (await _audioRecorder.hasPermission()) {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await getTemporaryDirectory();
       final path = '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _audioRecorder.start(const RecordConfig(), path: path);
       setState(() => _isRecording = true);

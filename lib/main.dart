@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Aapke model aur screens ke sahi imports
+// Screens & Models
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/login_screen.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
+import 'package:handyman_app/screens/provider_dashboard.dart'; // Isay add karein
+
+final supabase = Supabase.instance.client;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  await Supabase.initialize(
+    url: 'https://vhvwkoeejcdburoqfbvz.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodndrb2VlamNkYnVyb3FmYnZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzU5MDMsImV4cCI6MjA5MzgxMTkwM30.icVNBiGvIafm6fA3KzT4lP4w7Ky2gtzf5bjql5Rx5yk',
+  );
+
   runApp(const HandyManApp());
 }
 
@@ -28,7 +34,6 @@ class HandyManApp extends StatelessWidget {
         useMaterial3: true,
         textTheme: GoogleFonts.poppinsTextTheme(),
       ),
-      // App start hote hi AuthWrapper check karega ke user login hai ya nahi
       home: const AuthWrapper(),
     );
   }
@@ -39,50 +44,53 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      // Firebase Auth state check kar raha hai
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthState>(
+      stream: supabase.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        // 1. Agar loading ho rahi hai
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        // 2. Agar User Logged In hai
-        if (snapshot.hasData && snapshot.data != null) {
-          return FutureBuilder<DocumentSnapshot>(
-            // Firestore se user ka data fetch karna
-            future: FirebaseFirestore.instance
-                .collection('users')
-                .doc(snapshot.data!.uid)
-                .get(),
+        final session = snapshot.data?.session;
+
+        if (session != null) {
+          return FutureBuilder<PostgrestMap?>(
+            future: supabase
+                .from('users')
+                .select()
+                .eq('id', session.user.id)
+                .maybeSingle(),
             builder: (context, userSnapshot) {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
+                return const Scaffold(body: Center(child: CircularProgressIndicator()));
               }
 
-              if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                // Map se ProviderModel banana
+              if (userSnapshot.hasData && userSnapshot.data != null) {
+                // 1. Data model mein load karein
                 final userData = ProviderModel.fromMap(
-                  userSnapshot.data!.data() as Map<String, dynamic>,
-                  docId: snapshot.data!.uid,
+                  userSnapshot.data!,
                 );
 
-                // YAHAN ERROR FIX HUA: 'user' parameter pass ho gaya
-                return MainWrapper(user: userData);
+                // 2. Role fetch karein (Table mein column ka naam 'role' hona chahiye)
+                final String role = userSnapshot.data!['role'] ?? 'Customer';
+
+                print("DEBUG: App Start - User Role is: $role");
+
+                // 3. Role ke mutabiq sahi screen par bhejein
+                if (role == 'Provider') {
+                  return ProviderDashboard(provider: userData);
+                } else {
+                  return MainWrapper(user: userData);
+                }
               }
 
-              // Agar user login hai par data nahi mila (rare case)
+              // Agar session hai magar DB mein entry nahi mili
               return const LoginScreen();
             },
           );
         }
 
-        // 3. Agar User Login nahi hai
+        // Agar user login nahi hai
         return const LoginScreen();
       },
     );

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/models/message_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'chat_screen.dart';
 import 'package:intl/intl.dart';
+
+final supabase = Supabase.instance.client;
 
 class MessagesListScreen extends StatefulWidget {
   final String providerId;
@@ -27,21 +30,22 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         elevation: 0.5,
         centerTitle: true,
       ),
-      // CHANGE: FutureBuilder ki jagah StreamBuilder taake list real-time update ho
+      // REAL-TIME BOOKINGS STREAM (Using our generic StorageService method)
       body: StreamBuilder<List<BookingModel>>(
-        stream: StorageService.getProviderChatsStream(widget.providerId),
+        // isProvider = true kyunki provider inbox dekh raha hai
+        stream: StorageService.getBookingsStream(widget.providerId, true),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
           }
 
-          // Filter: Sirf wo bookings jin ka chat active ho sakta hai
-          final chatBookings = snapshot.data!
-              .where((b) => b.status == 'Accepted' || b.status == 'Completed' || b.status == 'Pending')
+          // Hum sirf un bookings ko dikhayenge jo Cancelled nahi hain
+          final chatBookings = (snapshot.data ?? [])
+              .where((b) => b.status != 'Cancelled')
               .toList();
 
           if (chatBookings.isEmpty) return _buildEmptyState();
@@ -61,14 +65,15 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   }
 
   Widget _buildChatTile(BuildContext context, BookingModel booking) {
+    // Last Message dikhane ke liye real-time chat stream
     return StreamBuilder<List<MessageModel>>(
       stream: StorageService.getChatStream(booking.id),
       builder: (context, snapshot) {
         String lastMsg = "Tap to start conversation";
         String time = "";
-        bool hasUnread = false; // Isay hum baad mein notification logic ke liye use kar sakte hain
 
         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          // Supabase se messages order ho kar aate hain, last one pick karein
           final lastMessageObj = snapshot.data!.last;
           if (lastMessageObj.type == MessageType.audio) {
             lastMsg = "🎤 Voice message";
@@ -82,7 +87,9 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => ChatScreen(booking: booking, isProvider: true)),
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(booking: booking),
+              ),
             );
           },
           onLongPress: () => _confirmDelete(context, booking),
@@ -91,14 +98,13 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                // Profile Avatar with Status Indicator
                 Stack(
                   children: [
                     CircleAvatar(
                       radius: 30,
                       backgroundColor: Colors.blue.shade100,
                       child: Text(
-                        booking.customerName[0].toUpperCase(),
+                        booking.customerName.isNotEmpty ? booking.customerName[0].toUpperCase() : "?",
                         style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
                       ),
                     ),
@@ -108,13 +114,16 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         bottom: 2,
                         child: Container(
                           width: 14, height: 14,
-                          decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                          decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2)
+                          ),
                         ),
                       ),
                   ],
                 ),
                 const SizedBox(width: 16),
-                // Message Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +131,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(booking.customerName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
+                          Text(booking.customerName,
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
                           Text(time, style: GoogleFonts.inter(fontSize: 11, color: Colors.grey)),
                         ],
                       ),
@@ -133,8 +143,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: lastMsg.contains("Tap to start") ? Colors.blue.shade300 : Colors.grey.shade600,
-                          fontWeight: lastMsg.contains("Tap to start") ? FontWeight.w500 : FontWeight.normal,
+                          color: lastMsg == "Tap to start conversation" ? Colors.blue.shade300 : Colors.grey.shade600,
+                          fontWeight: lastMsg == "Tap to start conversation" ? FontWeight.w500 : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -167,9 +177,16 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () async {
-              await StorageService.deleteFullConversation(booking.id);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chat cleared!")));
+              try {
+                // StorageService mein ye method bhi hona chahiye messages delete karne ke liye
+                await supabase.from('messages').delete().eq('booking_id', booking.id);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chat cleared!")));
+                }
+              } catch (e) {
+                print("Delete Error: $e");
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, elevation: 0),
             child: const Text("Clear", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),

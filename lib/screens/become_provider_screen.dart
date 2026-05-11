@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase Client
 import 'package:image_picker/image_picker.dart';
 import '../models/provider_model.dart';
 
@@ -15,6 +13,7 @@ class BecomeProviderScreen extends StatefulWidget {
 
 class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
   final _formKey = GlobalKey<FormState>();
+  final supabase = Supabase.instance.client;
 
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
@@ -39,6 +38,21 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
     }
   }
 
+  // --- Supabase Upload Helper ---
+  Future<String> _uploadFile(File file, String bucket, String fileName) async {
+    final String path = '$bucket/$fileName';
+
+    // File upload karein (overwrite true rakha hai takay agar dubara upload ho to replace ho jaye)
+    await supabase.storage.from(bucket).upload(
+      fileName,
+      file,
+      fileOptions: const FileOptions(upsert: true),
+    );
+
+    // Public URL hasil karein
+    return supabase.storage.from(bucket).getPublicUrl(fileName);
+  }
+
   void _submitData() async {
     if (_formKey.currentState!.validate()) {
       if (_cnicImage == null) {
@@ -49,47 +63,41 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
       setState(() => _isLoading = true);
 
       try {
-        final String uid = FirebaseAuth.instance.currentUser!.uid;
+        final user = supabase.auth.currentUser;
+        if (user == null) return;
+
+        final String uid = user.id;
         String profileUrl = "";
         String cnicUrl = "";
 
-        // 1. Upload Profile Photo if selected
+        // 1. Upload Profile Photo to 'profiles' bucket
         if (_profileImage != null) {
-          var ref = FirebaseStorage.instance.ref().child("profiles/$uid.jpg");
-          await ref.putFile(_profileImage!);
-          profileUrl = await ref.getDownloadURL();
+          profileUrl = await _uploadFile(_profileImage!, 'profiles', '$uid.jpg');
         }
 
-        // 2. Upload CNIC Photo (Mandatory for Provider)
-        var cnicRef = FirebaseStorage.instance.ref().child("cnics/$uid.jpg");
-        await cnicRef.putFile(_cnicImage!);
-        cnicUrl = await cnicRef.getDownloadURL();
+        // 2. Upload CNIC Photo to 'cnics' bucket
+        cnicUrl = await _uploadFile(_cnicImage!, 'cnics', '$uid.jpg');
 
-        // 3. Prepare Data for Firestore
-        final providerData = ProviderModel(
-          id: uid,
-          name: _nameController.text.trim(),
-          email: FirebaseAuth.instance.currentUser!.email ?? "",
-          password: "", // Auth handle kar raha hai
-          profession: _selectedCategory,
-          rating: 5.0,
-          pricePerHour: double.tryParse(_priceController.text.trim()) ?? 0.0,
-          imageUrl: profileUrl,
-          cnicUrl: cnicUrl,
-          about: _bioController.text.trim(),
-        );
-
-        // 4. Update Firestore Document
-        await FirebaseFirestore.instance.collection('users').doc(uid).set(providerData.toMap(), SetOptions(merge: true));
+        // 3. Update Supabase Database ('users' table)
+        // Yahan hum .update() use kar rahe hain kyunke user pehle se customer login hai
+        await supabase.from('users').update({
+          'name': _nameController.text.trim(),
+          'profession': _selectedCategory,
+          'price_per_hour': double.tryParse(_priceController.text.trim()) ?? 0.0,
+          'image_url': profileUrl,
+          'cnic_url': cnicUrl,
+          'about': _bioController.text.trim(),
+          'is_provider': true, // Optional: Role identify karne ke liye
+        }).eq('id', uid);
 
         if (!mounted) return;
         _showSnackBar("Congratulations! You are now a Provider", Colors.green);
         Navigator.pop(context);
 
       } catch (e) {
-        _showSnackBar("Error: $e", Colors.red);
+        _showSnackBar("Error: ${e.toString()}", Colors.red);
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -100,6 +108,7 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
     );
   }
 
+  // ... (build methods same rahengi jo aapne design ki hain)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -119,7 +128,6 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- DP SELECTION ---
               Center(
                 child: GestureDetector(
                   onTap: () => _pickImage(true),
@@ -132,22 +140,16 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-
               _buildTextField(_nameController, "Full Name", Icons.person_outline, "Your name"),
               const SizedBox(height: 24),
-
               const Text("Select Expertise", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
               const SizedBox(height: 10),
               _buildDropdown(),
               const SizedBox(height: 24),
-
               _buildTextField(_priceController, "Price per Hour (Rs.)", Icons.payments_outlined, "e.g. 1200", isNumber: true),
               const SizedBox(height: 24),
-
               _buildTextField(_bioController, "Short Bio", Icons.edit_note_rounded, "Tell us about your experience", maxLines: 3),
               const SizedBox(height: 24),
-
-              // --- CNIC UPLOAD ---
               const Text("CNIC Photo (Verification)", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
               const SizedBox(height: 10),
               GestureDetector(
@@ -165,7 +167,6 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
                       : ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.file(_cnicImage!, fit: BoxFit.cover)),
                 ),
               ),
-
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,

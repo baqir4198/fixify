@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
+import 'package:handyman_app/screens/login_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final ProviderModel user;
@@ -13,9 +14,10 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+  final supabase = Supabase.instance.client;
 
   late TextEditingController _nameController;
-  late TextEditingController _aboutController;
+  late TextEditingController _bioController; // 'about' se 'bio'
   late TextEditingController _rateController;
   late TextEditingController _passwordController;
   late TextEditingController _confirmPasswordController;
@@ -28,68 +30,103 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
-    _aboutController = TextEditingController(text: widget.user.about);
+    _bioController = TextEditingController(text: widget.user.bio);
     _rateController = TextEditingController(text: widget.user.pricePerHour.toString());
     _passwordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _bioController.dispose();
+    _rateController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  // --- Profile Update Logic ---
   void _saveChanges() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        User? currentUser = FirebaseAuth.instance.currentUser;
+    setState(() => _isLoading = true);
 
-        // 1. Agar password change karna hai
-        if (_showPasswordFields && _passwordController.text.isNotEmpty) {
-          if (_passwordController.text != _confirmPasswordController.text) {
-            _showError("Passwords do not match!");
-            setState(() => _isLoading = false);
-            return;
-          }
-          await currentUser!.updatePassword(_passwordController.text.trim());
+    try {
+      // 1. Agar password change karna hai toh Auth update karein
+      if (_showPasswordFields && _passwordController.text.isNotEmpty) {
+        if (_passwordController.text != _confirmPasswordController.text) {
+          throw "Passwords do not match!";
         }
-
-        // 2. Updated Model taiyar karein (cnicUrl maintain rakha hai)
-        ProviderModel updatedUser = ProviderModel(
-          id: widget.user.id,
-          name: _nameController.text.trim(),
-          email: widget.user.email,
-          password: "", // Database mein plain password nahi rakhte
-          profession: widget.user.profession,
-          rating: widget.user.rating,
-          pricePerHour: double.tryParse(_rateController.text) ?? 0.0,
-          imageUrl: widget.user.imageUrl,
-          cnicUrl: widget.user.cnicUrl, // Ye field lazmi pass karni hai
-          about: _aboutController.text.trim(),
-        );
-
-        // 3. Firestore mein update karein
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.user.id)
-            .update(updatedUser.toMap());
-
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
-        );
-
-        Navigator.pop(context, true); // True bhejte hain taake pichli screen refresh ho jaye
-
-      } catch (e) {
-        _showError("Update Failed: $e");
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
+        await supabase.auth.updateUser(UserAttributes(
+          password: _passwordController.text.trim(),
+        ));
       }
+
+      // 2. Database (Public Table) update karein
+      // Hum 'providers' ya 'users' table update kar rahe hain (as per your DB structure)
+      final Map<String, dynamic> updateData = {
+        'name': _nameController.text.trim(),
+        'bio': _bioController.text.trim(),
+        'price_per_hour': double.tryParse(_rateController.text) ?? 0.0,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Table name check karlein (users ya providers jo bhi aapne rakha hai)
+      await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', widget.user.id);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
+      );
+
+      Navigator.pop(context, true); // True bhejte hain taake pichli screen refresh ho sake
+
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- Logout Logic ---
+  void _handleLogout() async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text("Logout", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: const Text("Are you sure you want to sign out from your account?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Keep Logging In")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Logout", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirm) {
+      setState(() => _isLoading = true);
+      await supabase.auth.signOut();
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+      );
     }
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent, behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -98,69 +135,79 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     bool isProvider = widget.user.profession != "Customer";
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text("Edit Profile", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text("Edit Profile", style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.black)),
+        centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        elevation: 0.5,
+        iconTheme: const IconThemeData(color: Colors.black),
+        actions: [
+          IconButton(onPressed: _handleLogout, icon: const Icon(Icons.logout_rounded, color: Colors.redAccent)),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sectionHeader("General Information"),
-              _buildTextField("Full Name", _nameController, Icons.person_outline),
+              _sectionHeader("PERSONAL DETAILS"),
+              _buildTextField("Full Name", _nameController, Icons.person_rounded),
 
               if (isProvider) ...[
-                const SizedBox(height: 15),
-                _buildTextField("Hourly Rate (Rs.)", _rateController, Icons.payments_outlined, isNumber: true),
-                const SizedBox(height: 15),
-                _buildTextField("About / Bio", _aboutController, Icons.info_outline, maxLines: 3),
+                const SizedBox(height: 16),
+                _buildTextField("Hourly Rate (PKR)", _rateController, Icons.monetization_on_rounded, isNumber: true),
+                const SizedBox(height: 16),
+                _buildTextField("Bio / Professional Summary", _bioController, Icons.description_rounded, maxLines: 4),
               ],
 
-              const SizedBox(height: 30),
-              _sectionHeader("Security"),
+              const SizedBox(height: 32),
+              _sectionHeader("ACCOUNT SECURITY"),
 
               if (!_showPasswordFields)
-                TextButton.icon(
-                  onPressed: () => setState(() => _showPasswordFields = true),
-                  icon: const Icon(Icons.lock_reset, color: Colors.blue),
-                  label: const Text("Change Password", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.2))
+                  ),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _showPasswordFields = true),
+                    icon: const Icon(Icons.lock_reset_rounded),
+                    label: const Text("Update Password", style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                 )
               else ...[
-                _buildTextField("New Password", _passwordController, Icons.lock_outline, isPassword: true),
-                const SizedBox(height: 15),
-                _buildTextField("Confirm New Password", _confirmPasswordController, Icons.lock_reset_outlined, isPassword: true),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showPasswordFields = false;
-                      _passwordController.clear();
-                      _confirmPasswordController.clear();
-                    });
-                  },
-                  child: const Text("Cancel Password Change", style: TextStyle(color: Colors.red)),
+                _buildTextField("New Password", _passwordController, Icons.vpn_key_rounded, isPassword: true),
+                const SizedBox(height: 16),
+                _buildTextField("Confirm New Password", _confirmPasswordController, Icons.lock_clock_rounded, isPassword: true),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => setState(() => _showPasswordFields = false),
+                    child: const Text("Cancel Change", style: TextStyle(color: Colors.grey)),
+                  ),
                 ),
               ],
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,
-                height: 55,
+                height: 56,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    backgroundColor: Colors.blueAccent[700],
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   onPressed: _saveChanges,
-                  child: const Text("Update Profile", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: Text("Save All Changes", style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -172,8 +219,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Widget _sectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(title, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.blueGrey, letterSpacing: 1.1)),
     );
   }
 
@@ -183,25 +230,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       maxLines: isPassword ? 1 : maxLines,
       obscureText: isPassword ? !_isPasswordVisible : false,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      style: GoogleFonts.inter(fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon),
+        labelStyle: const TextStyle(color: Colors.blueGrey, fontSize: 14),
+        prefixIcon: Icon(icon, size: 20, color: Colors.blueAccent),
         suffixIcon: isPassword ? IconButton(
-          icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off),
+          icon: Icon(_isPasswordVisible ? Icons.visibility_rounded : Icons.visibility_off_rounded, size: 20),
           onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
         ) : null,
         filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey.shade100)),
+        fillColor: Colors.white,
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.blueAccent, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.redAccent)),
       ),
       validator: (value) {
-        if (_showPasswordFields && isPassword && (value == null || value.isEmpty)) {
-          return "Please fill this field";
-        }
-        if (!isPassword && (value == null || value.isEmpty)) {
-          return "This field is required";
-        }
+        if (_showPasswordFields && isPassword && (value == null || value.isEmpty)) return "Please enter password";
+        if (value == null || value.isEmpty) return "Required field";
         return null;
       },
     );

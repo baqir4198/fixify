@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
+
+final supabase = Supabase.instance.client;
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
@@ -14,7 +16,8 @@ class MyBookingsScreen extends StatefulWidget {
 }
 
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
-  final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? "";
+  // Supabase current user ID (UUID format)
+  final String currentUserId = supabase.auth.currentUser?.id ?? "";
 
   void _showRatingDialog(BuildContext context, BookingModel booking) {
     double selectedRating = 5.0;
@@ -62,13 +65,17 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
             ),
             onPressed: () async {
-              // Status update aur rating save karne ka logic
-              await StorageService.updateBookingStatus(booking.id, 'Completed');
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Feedback submitted! Successfully completed."))
-                );
+              try {
+                // StorageService mein method updateBookingStatus use ho raha hai
+                await StorageService.updateBookingStatus(booking.id, 'Completed');
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Feedback submitted! Job completed."))
+                  );
+                }
+              } catch (e) {
+                print("Error completing booking: $e");
               }
             },
             child: const Text("Submit", style: TextStyle(color: Colors.white)),
@@ -85,7 +92,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF0F2F5),
         appBar: AppBar(
-          title: const Text("My Appointments", style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text("My Appointments", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
           backgroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
@@ -104,7 +111,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           ),
         ),
         body: StreamBuilder<List<BookingModel>>(
-          stream: StorageService.getUserBookingsStream(currentUserId),
+          // StorageService.getBookingsStream ab UUID ke liye generic hai
+          // isProvider = false kyunki ye Customer ki screen hai
+          stream: StorageService.getBookingsStream(currentUserId, false),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -195,6 +204,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               ],
             ),
           ),
+          // Buttons logic (Chat, Complete, Cancel)
           if (booking.status == 'Accepted' || booking.status == 'Pending')
             Padding(
               padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
@@ -258,16 +268,17 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         borderRadius: BorderRadius.circular(15),
         child: booking.provider.imageUrl.isEmpty
             ? const Icon(Icons.person, color: Colors.blue, size: 30)
-            : Image.network(
+            : (booking.provider.imageUrl.startsWith('http')
+            ? Image.network(
           booking.provider.imageUrl,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-          },
-          errorBuilder: (context, error, stackTrace) =>
-          const Icon(Icons.broken_image, color: Colors.grey),
-        ),
+          errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.grey),
+        )
+            : Image.file(
+          File(booking.provider.imageUrl),
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.grey),
+        )),
       ),
     );
   }

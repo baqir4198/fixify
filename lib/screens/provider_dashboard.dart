@@ -1,12 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'edit_profile_screen.dart';
-import 'chat_screen.dart';
-import 'messages_list_screen.dart';
+import 'messages_list_screen.dart'; // Ab isay uncomment kar diya hai
+
+final supabase = Supabase.instance.client;
 
 class ProviderDashboard extends StatefulWidget {
   final ProviderModel provider;
@@ -26,7 +28,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     currentProvider = widget.provider;
   }
 
-  // Action Methods
   void acceptRequest(BookingModel booking) async {
     await StorageService.updateBookingStatus(booking.id, 'Accepted');
     _showSnackBar("Job Accepted!", Colors.blue);
@@ -59,7 +60,9 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         elevation: 0.5,
         actions: [
           IconButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => MessagesListScreen(providerId: currentProvider.id))),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => MessagesListScreen(providerId: currentProvider.id)));
+            },
             icon: const Icon(Icons.mail_outline_rounded, color: Colors.blue, size: 26),
           ),
           IconButton(
@@ -69,7 +72,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           const SizedBox(width: 8),
         ],
       ),
-      // --- REAL TIME STREAM ---
       body: StreamBuilder<List<BookingModel>>(
           stream: StorageService.getBookingsStream(currentProvider.id, true),
           builder: (context, snapshot) {
@@ -124,8 +126,15 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
       children: [
         CircleAvatar(
           radius: 30,
-          backgroundImage: NetworkImage(currentProvider.imageUrl),
           backgroundColor: Colors.blue.shade100,
+          backgroundImage: currentProvider.imageUrl.isEmpty
+              ? null
+              : (currentProvider.imageUrl.startsWith('http')
+              ? NetworkImage(currentProvider.imageUrl)
+              : FileImage(File(currentProvider.imageUrl)) as ImageProvider),
+          child: currentProvider.imageUrl.isEmpty
+              ? Text(currentProvider.name[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22))
+              : null,
         ),
         const SizedBox(width: 15),
         Expanded(
@@ -153,7 +162,10 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
       width: double.infinity,
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: isOnline ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)] : [Colors.grey, Colors.blueGrey]),
+        gradient: LinearGradient(
+            colors: isOnline
+                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
+                : [Colors.grey.shade700, Colors.blueGrey]),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -179,16 +191,24 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]
+      ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(radius: 24, child: Icon(Icons.person)),
+              CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.blue.shade50,
+                  child: const Icon(Icons.person, color: Colors.blue)
+              ),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(booking.customerName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                Text(booking.serviceName, style: GoogleFonts.inter(color: Colors.grey)),
+                Text(booking.serviceName, style: GoogleFonts.inter(color: Colors.grey, fontSize: 12)),
               ])),
               Text("Rs.${booking.price}", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.blue)),
             ],
@@ -196,9 +216,24 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           const SizedBox(height: 15),
           Row(
             children: [
-              Expanded(child: OutlinedButton(onPressed: () => declineRequest(booking), child: const Text("Decline"))),
+              Expanded(child: OutlinedButton(
+                  onPressed: () => declineRequest(booking),
+                  style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent),
+                      foregroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                  ),
+                  child: const Text("Decline"))),
               const SizedBox(width: 12),
-              Expanded(child: ElevatedButton(onPressed: () => acceptRequest(booking), child: const Text("Accept"))),
+              Expanded(child: ElevatedButton(
+                  onPressed: () => acceptRequest(booking),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                  ),
+                  child: const Text("Accept"))),
             ],
           )
         ],
@@ -207,13 +242,26 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
   }
 
   Widget _buildActiveJobCard(BookingModel booking) {
-    return ListTile(
-      tileColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.bolt, color: Colors.white)),
-      title: Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(booking.serviceName),
-      trailing: ElevatedButton(onPressed: () => completeJob(booking), child: const Text("Finish")),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]
+      ),
+      child: ListTile(
+        leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.bolt, color: Colors.white)),
+        title: Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(booking.serviceName, style: const TextStyle(fontSize: 12)),
+        trailing: ElevatedButton(
+            onPressed: () => completeJob(booking),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+            ),
+            child: const Text("Finish")),
+      ),
     );
   }
 
@@ -221,9 +269,13 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]
+        ),
         child: Row(children: [
-          Icon(icon, color: color),
+          Icon(icon, color: color, size: 28),
           const SizedBox(width: 10),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -239,7 +291,10 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
   ]);
 
-  Widget _sectionHeader(String title) => Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold));
+  Widget _sectionHeader(String title) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+  );
 
   Widget _emptyState(String msg) => Center(child: Padding(padding: const EdgeInsets.all(20), child: Text(msg, style: const TextStyle(color: Colors.grey))));
 }
