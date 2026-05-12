@@ -66,7 +66,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
         ),
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        // 'users' table se live data fetch ho raha hai
         stream: supabase.from('users').stream(primaryKey: ['id']),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -79,23 +78,21 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
           final allData = snapshot.data ?? [];
 
-          // 1. Filtering by Profession & Role
           List<ProviderModel> providers = allData
               .map((map) => ProviderModel.fromMap(map))
               .where((p) =>
           p.profession.trim().toLowerCase() == widget.categoryName.trim().toLowerCase()
           ).toList();
 
-          // 2. Search Filter
           if (_searchQuery.isNotEmpty) {
             providers = providers.where((p) => p.name.toLowerCase().contains(_searchQuery)).toList();
           }
 
-          // 3. Sorting Logic
+          // --- LOGIC CHANGE: Sorting by averageRating instead of raw rating ---
           if (_activeSort == "Price") {
             providers.sort((a, b) => a.pricePerHour.compareTo(b.pricePerHour));
           } else {
-            providers.sort((a, b) => b.rating.compareTo(a.rating));
+            providers.sort((a, b) => b.averageRating.compareTo(a.averageRating));
           }
 
           if (providers.isEmpty) return _buildEmptyState();
@@ -135,6 +132,9 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   }
 
   Widget _buildProviderCard(ProviderModel provider) {
+    // Check if new provider
+    bool isNew = provider.totalReviews < 3;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -167,8 +167,14 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                     Row(
                       children: [
                         const Icon(Icons.star_rounded, color: Colors.orange, size: 18),
-                        Text(" ${provider.rating}", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                        Text(" • Verified Expert", style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 4),
+                        // --- UI CHANGE: Show 'New' if reviews < 3 ---
+                        Text(
+                            isNew ? "New" : provider.averageRating.toStringAsFixed(1),
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)
+                        ),
+                        const SizedBox(width: 8),
+                        Text("• Verified Expert", style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.w500)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -186,13 +192,14 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
+  // --- Profile Image & Empty State Widgets remain same ---
   Widget _buildProfileImage(String url, String name) {
     return SizedBox(
       width: 70, height: 70,
       child: url.isEmpty || !url.startsWith('http')
           ? Container(
         color: Colors.blue.shade50,
-        child: Center(child: Text(name[0].toUpperCase(), style: const TextStyle(color: Colors.blueAccent, fontSize: 24, fontWeight: FontWeight.bold))),
+        child: Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : "?", style: const TextStyle(color: Colors.blueAccent, fontSize: 24, fontWeight: FontWeight.bold))),
       )
           : Image.network(url, fit: BoxFit.cover,
         loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),

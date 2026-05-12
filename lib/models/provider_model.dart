@@ -5,18 +5,20 @@ class ProviderModel {
   final String name;
   final String email;
   final String profession;
-  double rating;
+  double averageRating; // 'rating' ko 'averageRating' kar diya taake DB se match ho
+  final int totalReviews; // Naya field reviews count ke liye
   final double pricePerHour;
   String imageUrl;
   final String cnicUrl;
-  final String bio; // 'about' ko 'bio' kar diya hai consistency ke liye
+  final String bio;
 
   ProviderModel({
     required this.id,
     required this.name,
     required this.email,
     required this.profession,
-    required this.rating,
+    required this.averageRating,
+    required this.totalReviews,
     required this.pricePerHour,
     required this.imageUrl,
     required this.cnicUrl,
@@ -30,9 +32,11 @@ class ProviderModel {
       name: map['name']?.toString() ?? 'Unknown User',
       email: map['email']?.toString() ?? '',
       profession: map['profession']?.toString() ?? 'Customer',
-      rating: _toDouble(map['rating']),
+      // DB columns 'average_rating' aur 'total_reviews' se mapping
+      averageRating: _toDouble(map['average_rating'] ?? map['rating']),
+      totalReviews: map['total_reviews'] ?? 0,
       pricePerHour: _toDouble(map['price_per_hour']),
-      imageUrl: map['image_url']?.toString() ?? 'https://via.placeholder.com/150',
+      imageUrl: map['image_url']?.toString() ?? map['imageUrl']?.toString() ?? 'https://via.placeholder.com/150',
       cnicUrl: map['cnic_url']?.toString() ?? '',
       bio: map['bio']?.toString() ?? (map['about']?.toString() ?? 'No description provided.'),
     );
@@ -41,11 +45,12 @@ class ProviderModel {
   // --- SUPABASE MEIN SAVE/UPDATE KARNE KE LIYE ---
   Map<String, dynamic> toMap() {
     return {
-      'id': id, // Auth user ID yahan se jayegi
+      'id': id,
       'name': name,
       'email': email,
       'profession': profession,
-      'rating': rating,
+      'average_rating': averageRating,
+      'total_reviews': totalReviews,
       'price_per_hour': pricePerHour,
       'image_url': imageUrl,
       'cnic_url': cnicUrl,
@@ -62,20 +67,22 @@ class ProviderModel {
     return 0.0;
   }
 
-  // Helper method: User profile update karte waqt kaam aata hai
   ProviderModel copyWith({
     String? name,
     String? imageUrl,
     String? bio,
     double? pricePerHour,
     String? profession,
+    double? averageRating,
+    int? totalReviews,
   }) {
     return ProviderModel(
       id: id,
       name: name ?? this.name,
       email: email,
       profession: profession ?? this.profession,
-      rating: rating,
+      averageRating: averageRating ?? this.averageRating,
+      totalReviews: totalReviews ?? this.totalReviews,
       pricePerHour: pricePerHour ?? this.pricePerHour,
       imageUrl: imageUrl ?? this.imageUrl,
       cnicUrl: cnicUrl,

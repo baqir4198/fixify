@@ -29,31 +29,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     currentUser = widget.user;
   }
 
-  // --- Supabase Image Upload Logic ---
   Future<void> _updateProfileImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
 
     if (image != null) {
       setState(() => _isUploading = true);
-
       try {
         final file = File(image.path);
         final fileExt = image.path.split('.').last;
         final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
         final filePath = 'profile_pics/$fileName';
 
-        // 1. Upload to Supabase Storage (profiles bucket)
         await supabase.storage.from('profiles').upload(filePath, file);
-
-        // 2. Get Public URL
         final String publicUrl = supabase.storage.from('profiles').getPublicUrl(filePath);
 
-        // 3. Update Database
-        await supabase
-            .from('users')
-            .update({'imageUrl': publicUrl})
-            .eq('id', currentUser.id);
+        await supabase.from('users').update({'imageUrl': publicUrl}).eq('id', currentUser.id);
 
         setState(() {
           currentUser.imageUrl = publicUrl;
@@ -64,7 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile Picture Updated!")));
       } catch (e) {
         setState(() => _isUploading = false);
-        debugPrint("Upload Error: $e");
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
       }
     }
@@ -91,7 +81,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        // Supabase Real-time stream for user profile
         stream: supabase.from('users').stream(primaryKey: ['id']).eq('id', currentUser.id),
         builder: (context, snapshot) {
           if (snapshot.hasData && snapshot.data!.isNotEmpty) {
@@ -138,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // Stats Section (Live from Supabase via StorageService)
+                // --- Stats Section with Rating ---
                 StreamBuilder<List<BookingModel>>(
                     stream: StorageService.getBookingsStream(currentUser.id, false),
                     builder: (context, bookingSnap) {
@@ -147,6 +136,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           _buildStatCard("Total Bookings", total.toString()),
+                          // Dynamic Rating Card
+                          _buildRatingStatCard(currentUser.averageRating, currentUser.totalReviews),
                           _buildStatCard("Member Since", "2024"),
                         ],
                       );
@@ -176,7 +167,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
 
-                // Become Provider Button
                 if (currentUser.profession == "Customer")
                   Padding(
                     padding: const EdgeInsets.all(20),
@@ -214,6 +204,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // --- UI Helpers ---
+
   Widget _buildStatCard(String label, String value) {
     return Column(
       children: [
@@ -223,8 +215,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Naya Rating Stat Card jo professional check karta hai
+  Widget _buildRatingStatCard(double rating, int totalReviews) {
+    bool isNew = totalReviews < 3;
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.star_rounded, color: isNew ? Colors.grey : Colors.orange, size: 22),
+            const SizedBox(width: 4),
+            Text(
+              isNew ? "New" : rating.toStringAsFixed(1),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+            ),
+          ],
+        ),
+        Text(
+          isNew ? "Member" : "$totalReviews Reviews",
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
   Widget _buildProfileOption(IconData icon, String title, VoidCallback onTap) {
-    return ListTile(leading: Icon(icon, color: Colors.blueGrey), title: Text(title), trailing: const Icon(Icons.arrow_forward_ios, size: 14), onTap: onTap);
+    return ListTile(
+      leading: Icon(icon, color: Colors.blueGrey),
+      title: Text(title),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+      onTap: onTap,
+    );
   }
 
   Widget _buildProfileDivider() => Divider(height: 1, color: Colors.grey.withOpacity(0.1), indent: 50);

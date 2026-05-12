@@ -28,7 +28,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     super.initState();
     final user = supabase.auth.currentUser;
     if (user != null) {
-      // Supabase Auth metadata check
       _nameController.text = user.userMetadata?['full_name'] ?? user.userMetadata?['name'] ?? "";
     }
   }
@@ -39,7 +38,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     super.dispose();
   }
 
-  // --- Date and Time Picker ---
   Future<void> _pickDateTime() async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
@@ -69,7 +67,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     }
   }
 
-  // --- Confirmation Bottom Sheet ---
   void _showConfirmation() {
     String dateStr = DateFormat('EEEE, MMM d').format(_selectedDate!);
     String timeStr = _selectedTime!.format(context);
@@ -123,8 +120,11 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                     try {
                       final String uid = supabase.auth.currentUser?.id ?? "";
 
+                      // --- NAYA KAAM: Customer ki current rating fetch karna ---
+                      final ratingData = await StorageService.getCustomerRatingData(uid);
+
                       final newBooking = BookingModel(
-                        id: '', // Supabase automatic UUID generate karega
+                        id: '',
                         provider: widget.provider,
                         customerName: _nameController.text.trim(),
                         customerId: uid,
@@ -133,13 +133,16 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                         serviceName: widget.provider.profession,
                         price: widget.provider.pricePerHour.toString(),
                         status: 'Pending',
+                        // In fields se provider dashboard pe "New Client" check chalega
+                        customerAverageRating: ratingData['average_rating'],
+                        customerTotalReviews: ratingData['total_reviews'],
                       );
 
                       await StorageService.saveBooking(newBooking);
 
                       if (!mounted) return;
-                      Navigator.pop(ctx); // Close BottomSheet
-                      Navigator.pop(context); // Close Detail Screen
+                      Navigator.pop(ctx);
+                      Navigator.pop(context);
 
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -170,23 +173,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     );
   }
 
-  Widget _buildInfoContainer(String date, String time) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.withOpacity(0.1))),
-      child: Column(
-        children: [
-          _buildInfoRow(Icons.calendar_month_rounded, "Scheduled Date", date),
-          const Divider(height: 20),
-          _buildInfoRow(Icons.watch_later_rounded, "Arrival Time", time),
-          const Divider(height: 20),
-          _buildInfoRow(Icons.payments_rounded, "Estimated Rate", "Rs. ${widget.provider.pricePerHour}/hr", isLast: true),
-        ],
-      ),
-    );
-  }
-
-  // --- UI building widgets (Slivers) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -229,7 +215,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  _buildStatsRow(),
+                  _buildStatsRow(), // Rating yahan show hogi
                   const SizedBox(height: 32),
                   Text("About Provider", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
@@ -269,16 +255,22 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
         widget.provider.imageUrl.startsWith('http')
             ? Image.network(widget.provider.imageUrl, fit: BoxFit.cover)
             : Container(color: Colors.blue[100], child: const Icon(Icons.person, size: 100, color: Colors.white)),
-        // Dark overlay for visibility
         Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.3), Colors.transparent, Colors.transparent, Colors.black.withOpacity(0.5)]))),
       ],
     );
   }
 
   Widget _buildStatsRow() {
+    // Check if new provider or old
+    bool isNew = widget.provider.totalReviews < 3;
     return Row(
       children: [
-        _statBox(Icons.star_rounded, "${widget.provider.rating}", "Rating", Colors.orange),
+        _statBox(
+            Icons.star_rounded,
+            isNew ? "New" : widget.provider.averageRating.toStringAsFixed(1),
+            "Rating",
+            Colors.orange
+        ),
         const SizedBox(width: 12),
         _statBox(Icons.verified_rounded, "Verified", "Identity", Colors.green),
         const SizedBox(width: 12),
@@ -300,6 +292,22 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoContainer(String date, String time) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.withOpacity(0.1))),
+      child: Column(
+        children: [
+          _buildInfoRow(Icons.calendar_month_rounded, "Scheduled Date", date),
+          const Divider(height: 20),
+          _buildInfoRow(Icons.watch_later_rounded, "Arrival Time", time),
+          const Divider(height: 20),
+          _buildInfoRow(Icons.payments_rounded, "Estimated Rate", "Rs. ${widget.provider.pricePerHour}/hr", isLast: true),
+        ],
       ),
     );
   }

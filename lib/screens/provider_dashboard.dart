@@ -6,7 +6,7 @@ import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
 import 'edit_profile_screen.dart';
-import 'messages_list_screen.dart'; // Ab isay uncomment kar diya hai
+import 'messages_list_screen.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -28,19 +28,87 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     currentProvider = widget.provider;
   }
 
+  // --- ACTIONS ---
+
   void acceptRequest(BookingModel booking) async {
     await StorageService.updateBookingStatus(booking.id, 'Accepted');
     _showSnackBar("Job Accepted!", Colors.blue);
   }
 
   void completeJob(BookingModel booking) async {
-    await StorageService.updateBookingStatus(booking.id, 'Completed');
-    _showSnackBar("Job Completed! Earnings updated.", Colors.green);
+    try {
+      await StorageService.updateBookingStatus(booking.id, 'Finished');
+      _showSnackBar("Job marked as Finished! Awaiting customer rating.", Colors.blue);
+      if (mounted) {
+        _showCustomerRatingDialog(booking);
+      }
+    } catch (e) {
+      _showSnackBar("Error: $e", Colors.red);
+    }
   }
 
   void declineRequest(BookingModel booking) async {
+    // Status 'Declined' karne se ye 'pending' list se nikal jayega
     await StorageService.updateBookingStatus(booking.id, 'Declined');
     _showSnackBar("Request Declined.", Colors.red);
+  }
+
+  // --- RATING DIALOG ---
+
+  void _showCustomerRatingDialog(BookingModel booking) {
+    double selectedRating = 5.0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text("Rate Customer", textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("How was your experience with ${booking.customerName}?",
+                    textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 14)),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    return IconButton(
+                      icon: Icon(
+                        index < selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: Colors.orange,
+                        size: 32,
+                      ),
+                      onPressed: () => setDialogState(() => selectedRating = index + 1.0),
+                    );
+                  }),
+                ),
+              ],
+            ),
+            actions: [
+              Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await StorageService.submitRating(
+                      bookingId: booking.id,
+                      targetUserId: booking.customerId,
+                      rating: selectedRating,
+                      ratingForProvider: false,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text("Submit Rating", style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showSnackBar(String msg, Color color) {
@@ -60,9 +128,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         elevation: 0.5,
         actions: [
           IconButton(
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => MessagesListScreen(providerId: currentProvider.id)));
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => MessagesListScreen(providerId: currentProvider.id))),
             icon: const Icon(Icons.mail_outline_rounded, color: Colors.blue, size: 26),
           ),
           IconButton(
@@ -75,45 +141,54 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
       body: StreamBuilder<List<BookingModel>>(
           stream: StorageService.getBookingsStream(currentProvider.id, true),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
 
             final allBookings = snapshot.data ?? [];
-            final newRequests = allBookings.where((b) => b.status == 'Pending').toList();
-            final activeJobs = allBookings.where((b) => b.status == 'Accepted').toList();
-            final completedJobs = allBookings.where((b) => b.status == 'Completed').toList();
+
+            // FILTER LOGIC (Airtight Fix):
+            // Sirf wahi dikhao jo Pending hain. Declined ya Cancelled yahan se hat jayenge.
+            final newRequests = allBookings.where((b) => b.status.toLowerCase().trim() == 'pending').toList();
+
+            // Sirf Accepted aur Finished dikhao. Cancelled ya Completed yahan se foran hat jayenge.
+            final activeJobs = allBookings.where((b) {
+              final s = b.status.toLowerCase().trim();
+              return s == 'accepted' || s == 'finished';
+            }).toList();
+
+            final completedJobs = allBookings.where((b) => b.status.toLowerCase().trim() == 'completed').toList();
 
             double totalEarnings = completedJobs.fold(0, (sum, item) => sum + (double.tryParse(item.price) ?? 0));
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 25),
-                  _buildEarningsCard(totalEarnings, completedJobs.length),
-                  const SizedBox(height: 25),
-
-                  Row(
-                    children: [
-                      _buildSmallStatCard("Pending", "${newRequests.length}", Icons.pending_actions, Colors.orange),
-                      const SizedBox(width: 15),
-                      _buildSmallStatCard("Active", "${activeJobs.length}", Icons.directions_run, Colors.green),
-                    ],
-                  ),
-
-                  const SizedBox(height: 30),
-                  _sectionHeader("New Requests"),
-                  if (newRequests.isEmpty) _emptyState("No new requests found")
-                  else ...newRequests.map((b) => _buildRequestCard(b)),
-
-                  const SizedBox(height: 30),
-                  _sectionHeader("Active Work"),
-                  if (activeJobs.isEmpty) _emptyState("No active jobs right now")
-                  else ...activeJobs.map((b) => _buildActiveJobCard(b)),
-                ],
+            return RefreshIndicator(
+              onRefresh: () async => setState(() {}),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 25),
+                    _buildEarningsCard(totalEarnings, completedJobs.length),
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        _buildSmallStatCard("Pending", "${newRequests.length}", Icons.pending_actions, Colors.orange),
+                        const SizedBox(width: 15),
+                        _buildSmallStatCard("Active", "${activeJobs.length}", Icons.directions_run, Colors.green),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+                    _sectionHeader("New Requests"),
+                    if (newRequests.isEmpty) _emptyState("No new requests found")
+                    else ...newRequests.map((b) => _buildRequestCard(b)),
+                    const SizedBox(height: 30),
+                    _sectionHeader("Active Work"),
+                    if (activeJobs.isEmpty) _emptyState("No active jobs right now")
+                    else ...activeJobs.map((b) => _buildActiveJobCard(b)),
+                  ],
+                ),
               ),
             );
           }
@@ -127,11 +202,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         CircleAvatar(
           radius: 30,
           backgroundColor: Colors.blue.shade100,
-          backgroundImage: currentProvider.imageUrl.isEmpty
-              ? null
-              : (currentProvider.imageUrl.startsWith('http')
-              ? NetworkImage(currentProvider.imageUrl)
-              : FileImage(File(currentProvider.imageUrl)) as ImageProvider),
+          backgroundImage: currentProvider.imageUrl.isEmpty ? null : NetworkImage(currentProvider.imageUrl),
           child: currentProvider.imageUrl.isEmpty
               ? Text(currentProvider.name[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22))
               : null,
@@ -141,18 +212,12 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Hi, ${currentProvider.name} 👋",
-                  style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold)),
-              Text(currentProvider.profession,
-                  style: GoogleFonts.inter(color: Colors.grey.shade600, fontSize: 13)),
+              Text("Hi, ${currentProvider.name} 👋", style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(currentProvider.profession, style: GoogleFonts.inter(color: Colors.grey.shade600, fontSize: 13)),
             ],
           ),
         ),
-        Switch(
-          value: isOnline,
-          activeColor: Colors.green,
-          onChanged: (v) => setState(() => isOnline = v),
-        ),
+        Switch(value: isOnline, activeColor: Colors.green, onChanged: (v) => setState(() => isOnline = v)),
       ],
     );
   }
@@ -162,10 +227,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
       width: double.infinity,
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-            colors: isOnline
-                ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)]
-                : [Colors.grey.shade700, Colors.blueGrey]),
+        gradient: LinearGradient(colors: isOnline ? [const Color(0xFF1E3C72), const Color(0xFF2A5298)] : [Colors.grey.shade700, Colors.blueGrey]),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -178,7 +240,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _miniStat("Jobs Done", "$jobs"),
-              _miniStat("Rating", "${currentProvider.rating} ★"),
+              _miniStat("Rating", "${currentProvider.averageRating.toStringAsFixed(1)} ★"),
               _miniStat("Rate/hr", "Rs.${currentProvider.pricePerHour.toInt()}"),
             ],
           )
@@ -191,23 +253,16 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]),
       child: Column(
         children: [
           Row(
             children: [
-              CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.blue.shade50,
-                  child: const Icon(Icons.person, color: Colors.blue)
-              ),
+              CircleAvatar(radius: 24, backgroundColor: Colors.blue.shade50, child: const Icon(Icons.person, color: Colors.blue)),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(booking.customerName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                _buildClientRatingBadge(booking),
                 Text(booking.serviceName, style: GoogleFonts.inter(color: Colors.grey, fontSize: 12)),
               ])),
               Text("Rs.${booking.price}", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.blue)),
@@ -216,24 +271,9 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
           const SizedBox(height: 15),
           Row(
             children: [
-              Expanded(child: OutlinedButton(
-                  onPressed: () => declineRequest(booking),
-                  style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.redAccent),
-                      foregroundColor: Colors.redAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-                  ),
-                  child: const Text("Decline"))),
+              Expanded(child: OutlinedButton(onPressed: () => declineRequest(booking), style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent), foregroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Decline"))),
               const SizedBox(width: 12),
-              Expanded(child: ElevatedButton(
-                  onPressed: () => acceptRequest(booking),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-                  ),
-                  child: const Text("Accept"))),
+              Expanded(child: ElevatedButton(onPressed: () => acceptRequest(booking), style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Accept"))),
             ],
           )
         ],
@@ -241,26 +281,47 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
+  Widget _buildClientRatingBadge(BookingModel booking) {
+    bool isNew = (booking.customerTotalReviews ?? 0) < 3;
+    return Row(
+      children: [
+        Icon(Icons.star_rounded, color: isNew ? Colors.grey : Colors.orange, size: 14),
+        const SizedBox(width: 4),
+        Text(
+          isNew ? "New Client" : "${booking.customerAverageRating?.toStringAsFixed(1) ?? '5.0'}",
+          style: GoogleFonts.inter(
+              color: isNew ? Colors.blue : Colors.grey.shade700,
+              fontSize: 11,
+              fontWeight: FontWeight.w600
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActiveJobCard(BookingModel booking) {
+    final s = booking.status.toLowerCase().trim();
+    bool isFinished = s == 'finished';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
       child: ListTile(
-        leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.bolt, color: Colors.white)),
+        leading: CircleAvatar(
+            backgroundColor: isFinished ? Colors.orange : Colors.green,
+            child: Icon(isFinished ? Icons.hourglass_bottom : Icons.bolt, color: Colors.white)
+        ),
         title: Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(booking.serviceName, style: const TextStyle(fontSize: 12)),
+        subtitle: Text(isFinished ? "Waiting for Customer Rating..." : booking.serviceName,
+            style: TextStyle(fontSize: 12, color: isFinished ? Colors.orange : Colors.grey)),
         trailing: ElevatedButton(
-            onPressed: () => completeJob(booking),
+            onPressed: isFinished ? () => _showCustomerRatingDialog(booking) : () => completeJob(booking),
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: isFinished ? Colors.orange : Colors.green,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
             ),
-            child: const Text("Finish")),
+            child: Text(isFinished ? "Rate Again" : "Finish")),
       ),
     );
   }
@@ -269,11 +330,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
         child: Row(children: [
           Icon(icon, color: color, size: 28),
           const SizedBox(width: 10),
@@ -291,10 +348,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
   ]);
 
-  Widget _sectionHeader(String title) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    child: Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-  );
+  Widget _sectionHeader(String title) => Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)));
 
   Widget _emptyState(String msg) => Center(child: Padding(padding: const EdgeInsets.all(20), child: Text(msg, style: const TextStyle(color: Colors.grey))));
 }

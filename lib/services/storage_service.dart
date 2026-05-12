@@ -27,7 +27,6 @@ class StorageService {
   // ================= BOOKING LOGIC =================
   static Future<void> saveBooking(BookingModel booking) async {
     try {
-      // 1. Insert and get back the new row with UUID
       final response = await _supabase
           .from('bookings')
           .insert(booking.toMap())
@@ -35,8 +34,6 @@ class StorageService {
           .single();
 
       final savedBooking = BookingModel.fromMap(response);
-
-      // 2. Auto welcome message
       await sendAutoWelcomeMessage(savedBooking);
     } catch (e) {
       print("SAVE BOOKING ERROR: $e");
@@ -57,10 +54,91 @@ class StorageService {
 
   static Future<void> updateBookingStatus(String id, String newStatus) async {
     try {
-      await _supabase.from('bookings').update({'status': newStatus}).eq('id', id);
+      // .select() lagane se real-time update trigger hone ke chances barh jate hain
+      await _supabase
+          .from('bookings')
+          .update({'status': newStatus})
+          .eq('id', id)
+          .select();
+
+      print("Database Status Successfully Updated to: $newStatus");
     } catch (e) {
       print("Update Status Error: $e");
       rethrow;
+    }
+  }
+
+  // ================= RATING & COMPLETION =================
+
+  static Future<void> completeAndRateTask({
+    required BookingModel booking,
+    required double rating,
+  }) async {
+    try {
+      // Pehle status update karein
+      await updateBookingStatus(booking.id, 'Completed');
+
+      // Phir rating submit karein
+      await submitRating(
+        bookingId: booking.id,
+        targetUserId: booking.provider.id,
+        rating: rating,
+        ratingForProvider: true,
+      );
+    } catch (e) {
+      print("Error in completeAndRateTask: $e");
+    }
+  }
+
+  static Future<void> submitRating({
+    required String bookingId,
+    required String targetUserId,
+    required double rating,
+    required bool ratingForProvider,
+  }) async {
+    try {
+      String ratingCol = ratingForProvider ? 'provider_rating' : 'customer_rating';
+
+      // Update rating in booking
+      await _supabase.from('bookings').update({ratingCol: rating}).eq('id', bookingId).select();
+
+      // Get user data to update average
+      final userData = await _supabase
+          .from('users')
+          .select('average_rating, total_reviews')
+          .eq('id', targetUserId)
+          .single();
+
+      double currentAvg = (userData['average_rating'] ?? 5.0).toDouble();
+      int totalReviews = userData['total_reviews'] ?? 0;
+
+      int newTotalReviews = totalReviews + 1;
+      double newAverage = ((currentAvg * totalReviews) + rating) / newTotalReviews;
+
+      await _supabase.from('users').update({
+        'average_rating': newAverage,
+        'total_reviews': newTotalReviews,
+      }).eq('id', targetUserId).select();
+
+    } catch (e) {
+      print("Error in submitRating: $e");
+    }
+  }
+
+  static Future<Map<String, dynamic>> getCustomerRatingData(String customerId) async {
+    try {
+      final data = await _supabase
+          .from('users')
+          .select('average_rating, total_reviews')
+          .eq('id', customerId)
+          .single();
+      return {
+        'average_rating': (data['average_rating'] ?? 5.0).toDouble(),
+        'total_reviews': data['total_reviews'] ?? 0,
+      };
+    } catch (e) {
+      print("Get Customer Rating Error: $e");
+      return {'average_rating': 5.0, 'total_reviews': 0};
     }
   }
 
@@ -68,7 +146,7 @@ class StorageService {
   static Future<void> sendMessage(MessageModel message) async {
     try {
       final messageData = message.toMap();
-      messageData.remove('id'); // ID remove ki taake Supabase UUID banaye
+      messageData.remove('id');
       await _supabase.from('messages').insert(messageData);
     } catch (e) {
       print("Send Message Error: $e");
@@ -88,17 +166,17 @@ class StorageService {
   static Future<void> sendAutoWelcomeMessage(BookingModel booking) async {
     try {
       final autoMsg = MessageModel(
-        id: '', // Empty rakha
-        bookingId: booking.id, // Ab ye sahi UUID hai
+        id: '',
+        bookingId: booking.id,
         senderId: booking.customerId,
         receiverId: booking.provider.id,
-        content: "Hi ${booking.provider.name}, I have booked your service. Let's discuss!",
+        content: "Hi ${booking.provider.name}, I have booked your service.",
         timestamp: DateTime.now(),
         type: MessageType.text,
       );
       await sendMessage(autoMsg);
     } catch (e) {
-      print("Auto Welcome Message Error: $e");
+      print("Auto Message Error: $e");
     }
   }
 }

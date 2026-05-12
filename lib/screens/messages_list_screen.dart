@@ -88,7 +88,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ChatScreen(booking: booking),
+                builder: (context) => ChatScreen(booking: booking,isProvider: true,),
               ),
             );
           },

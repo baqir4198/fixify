@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/login_screen.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
-import 'package:handyman_app/screens/provider_dashboard.dart'; // Isay add karein
+import 'package:handyman_app/screens/provider_dashboard.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -16,6 +16,9 @@ void main() async {
   await Supabase.initialize(
     url: 'https://vhvwkoeejcdburoqfbvz.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodndrb2VlamNkYnVyb3FmYnZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzU5MDMsImV4cCI6MjA5MzgxMTkwM30.icVNBiGvIafm6fA3KzT4lP4w7Ky2gtzf5bjql5Rx5yk',
+    authOptions: const FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.pkce,
+    ),
   );
 
   runApp(const HandyManApp());

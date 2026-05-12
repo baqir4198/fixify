@@ -74,19 +74,53 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // --- SENDING LOGIC (Synced with Model) ---
   void _handleSend() async {
-    String sId = widget.isProvider ? widget.booking.provider.id : widget.booking.customerId;
-    String rId = widget.isProvider ? widget.booking.customerId : widget.booking.provider.id;
+    // 1. IDs ko nikaalein aur String mein convert karke trim karein safety ke liye
+    String sId = (widget.isProvider
+        ? widget.booking.provider.id
+        : widget.booking.customerId)
+        .toString()
+        .trim();
 
+    String rId = (widget.isProvider
+        ? widget.booking.customerId
+        : widget.booking.provider.id)
+        .toString()
+        .trim();
+
+    // 2. Debugging: Console mein lazmi check karein ke IDs different hain ya nahi
+    debugPrint("--- CHAT DEBUG ---");
+    debugPrint("I am Provider: ${widget.isProvider}");
+    debugPrint("Sender ID (sId): '$sId'");
+    debugPrint("Receiver ID (rId): '$rId'");
+    debugPrint("------------------");
+
+    // 3. Logic Check: Agar IDs same hain toh message bhejney ka faida nahi
+    if (sId == rId) {
+      debugPrint("CRITICAL ERROR: Sender and Receiver IDs are the SAME!");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error: Sender and Receiver are identical.")),
+      );
+      return;
+    }
+
+    // 4. Message Sending Process
     if (_isRecording) {
+      // Audio recording handle karein
       _timer?.cancel();
       final path = await _audioRecorder.stop();
       setState(() => _isRecording = false);
+
       if (path != null) {
         _uploadAndSendMedia(File(path), MessageType.audio, sId, rId);
       }
     } else if (_messageController.text.trim().isNotEmpty) {
+      // Text message handle karein
       String content = _messageController.text.trim();
+
+      // UI foran clear karein taake user ko speed mehsoos ho
       _messageController.clear();
+      setState(() {}); // UI update for mic icon change
+
       _sendMessageToSupabase(content, MessageType.text, sId, rId);
     }
   }

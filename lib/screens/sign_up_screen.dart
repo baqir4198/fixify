@@ -132,16 +132,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
         email: email,
         profession: currentRole == "Provider" ? selectedCategory : "Customer",
         pricePerHour: currentRole == "Provider" ? (double.tryParse(_costController.text.trim()) ?? 0.0) : 0.0,
-        rating: 5.0,
         imageUrl: profileUrl,
         cnicUrl: cnicUrl,
         bio: currentRole == "Provider" ? "Professional $selectedCategory provider." : "Customer Account",
+        averageRating: 5.0,
+        totalReviews: 0,
       );
 
       // 4. Save to Database with Role Column
       final Map<String, dynamic> dataToInsert = newUser.toMap();
       dataToInsert['role'] = currentRole;
-
+      dataToInsert['average_rating'] = 5.0; // Ye line add karein
+      dataToInsert['total_reviews'] = 0;
       await supabase.from('users').upsert(dataToInsert);
 
       if (!mounted) return;
