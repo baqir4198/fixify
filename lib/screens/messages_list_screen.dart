@@ -30,9 +30,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         elevation: 0.5,
         centerTitle: true,
       ),
-      // REAL-TIME BOOKINGS STREAM (Using our generic StorageService method)
       body: StreamBuilder<List<BookingModel>>(
-        // isProvider = true kyunki provider inbox dekh raha hai
         stream: StorageService.getBookingsStream(widget.providerId, true),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -43,7 +41,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             return Center(child: Text("Error: ${snapshot.error}"));
           }
 
-          // Hum sirf un bookings ko dikhayenge jo Cancelled nahi hain
           final chatBookings = (snapshot.data ?? [])
               .where((b) => b.status != 'Cancelled')
               .toList();
@@ -65,7 +62,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   }
 
   Widget _buildChatTile(BuildContext context, BookingModel booking) {
-    // Last Message dikhane ke liye real-time chat stream
     return StreamBuilder<List<MessageModel>>(
       stream: StorageService.getChatStream(booking.id),
       builder: (context, snapshot) {
@@ -73,7 +69,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         String time = "";
 
         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-          // Supabase se messages order ho kar aate hain, last one pick karein
           final lastMessageObj = snapshot.data!.last;
           if (lastMessageObj.type == MessageType.audio) {
             lastMsg = "🎤 Voice message";
@@ -178,7 +173,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
-                // StorageService mein ye method bhi hona chahiye messages delete karne ke liye
                 await supabase.from('messages').delete().eq('booking_id', booking.id);
                 if (context.mounted) {
                   Navigator.pop(context);

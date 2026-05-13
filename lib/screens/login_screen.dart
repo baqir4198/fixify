@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
 import 'package:handyman_app/screens/sign_up_screen.dart';
-import 'package:handyman_app/screens/provider_dashboard.dart'; // Isay lazmi import rakhein
+import 'package:handyman_app/screens/provider_dashboard.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _isPasswordVisible = false;
-  String userRole = "Customer"; // UI Toggle ke liye
+  String userRole = "Customer";
 
   @override
   void dispose() {
@@ -29,7 +29,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- FIX: Mukammal Login aur Role-Based Navigation Logic ---
   void _handleLogin() async {
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
@@ -42,7 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Supabase Auth Login
       final AuthResponse res = await supabase.auth.signInWithPassword(
         email: email,
         password: password,
@@ -51,29 +49,23 @@ class _LoginScreenState extends State<LoginScreen> {
       final User? user = res.user;
       if (user == null) throw "Login failed. Please try again.";
 
-      // 2. Database se user ka profile fetch karna (Sahi columns ke sath)
       final userData = await supabase
           .from('users')
           .select()
           .eq('id', user.id)
           .single();
 
-      // 3. Map ko Model mein convert karna
       final matchingUser = ProviderModel.fromMap(userData, docId: user.id);
 
       if (!mounted) return;
 
-      // 4. Role Validation logic
-      // Database mein store kiya gaya role (Jo humne Registration mein add kiya tha)
       String dbRole = userData['role'] ?? (userData['profession'] == "Customer" ? "Customer" : "Provider");
 
-      // Check karein ke jo switch UI mein select hai, wahi database mein hai ya nahi
       if (userRole != dbRole) {
-        await supabase.auth.signOut(); // Account switch ki wajah se sign out zaroori hai
+        await supabase.auth.signOut();
         throw "This account is a $dbRole. Please select '$dbRole' option above.";
       }
 
-      // 5. Success Navigation (AB SAHI DASHBOARD KHULEGA)
       if (dbRole == "Provider") {
         Navigator.pushReplacement(
             context,
@@ -127,7 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: GoogleFonts.inter(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 40),
-              // Role Switcher
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16)),

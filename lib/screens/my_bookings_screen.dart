@@ -62,7 +62,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             return TabBarView(
               children: [
                 _buildBookingList(allBookings, ['pending']),
-                // 'finished' yahan hona zaroori hai taake Customer rate kar sakay
                 _buildBookingList(allBookings, ['accepted', 'finished']),
                 _buildBookingList(allBookings, ['completed', 'cancelled', 'declined']),
               ],
@@ -228,7 +227,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
               onPressed: isSubmitting ? null : () async {
                 setDialogState(() => isSubmitting = true);
                 try {
-                  // Customer rating bhej raha hai jo DB mein provider_rating column mein jayegi
                   await StorageService.completeAndRateTask(
                       booking: booking,
                       rating: selectedRating

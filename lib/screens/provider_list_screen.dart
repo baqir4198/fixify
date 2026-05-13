@@ -88,7 +88,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
             providers = providers.where((p) => p.name.toLowerCase().contains(_searchQuery)).toList();
           }
 
-          // --- LOGIC CHANGE: Sorting by averageRating instead of raw rating ---
           if (_activeSort == "Price") {
             providers.sort((a, b) => a.pricePerHour.compareTo(b.pricePerHour));
           } else {
@@ -132,7 +131,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
   }
 
   Widget _buildProviderCard(ProviderModel provider) {
-    // Check if new provider
     bool isNew = provider.totalReviews < 3;
 
     return Container(
@@ -168,7 +166,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                       children: [
                         const Icon(Icons.star_rounded, color: Colors.orange, size: 18),
                         const SizedBox(width: 4),
-                        // --- UI CHANGE: Show 'New' if reviews < 3 ---
                         Text(
                             isNew ? "New" : provider.averageRating.toStringAsFixed(1),
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)
@@ -192,7 +189,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
     );
   }
 
-  // --- Profile Image & Empty State Widgets remain same ---
   Widget _buildProfileImage(String url, String name) {
     return SizedBox(
       width: 70, height: 70,

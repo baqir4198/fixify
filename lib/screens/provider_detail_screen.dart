@@ -120,7 +120,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                     try {
                       final String uid = supabase.auth.currentUser?.id ?? "";
 
-                      // --- NAYA KAAM: Customer ki current rating fetch karna ---
                       final ratingData = await StorageService.getCustomerRatingData(uid);
 
                       final newBooking = BookingModel(
@@ -133,7 +132,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                         serviceName: widget.provider.profession,
                         price: widget.provider.pricePerHour.toString(),
                         status: 'Pending',
-                        // In fields se provider dashboard pe "New Client" check chalega
                         customerAverageRating: ratingData['average_rating'],
                         customerTotalReviews: ratingData['total_reviews'],
                       );
@@ -215,7 +213,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  _buildStatsRow(), // Rating yahan show hogi
+                  _buildStatsRow(),
                   const SizedBox(height: 32),
                   Text("About Provider", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
@@ -261,7 +259,6 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   }
 
   Widget _buildStatsRow() {
-    // Check if new provider or old
     bool isNew = widget.provider.totalReviews < 3;
     return Row(
       children: [

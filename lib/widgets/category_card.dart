@@ -14,21 +14,21 @@ class CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material( // Material add kiya taake InkWell ka splash nazar aaye
+    return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         splashColor: service.color.withOpacity(0.1),
         highlightColor: service.color.withOpacity(0.05),
-        child: AnimatedContainer( // Click feel behtar karne ke liye
+        child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03), // Zyada natural shadow
+                color: Colors.black.withOpacity(0.03),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -41,12 +41,12 @@ class CategoryCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icon Container
+
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
                   color: service.color.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(15), // Circle ki jagah Rounded Square
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: Icon(
                   service.icon,
@@ -55,17 +55,15 @@ class CategoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              // Name
               Text(
                 service.name,
-                style: GoogleFonts.poppins( // Professional Font
+                style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
               ),
               const SizedBox(height: 2),
-              // Status/Subtitle
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -73,7 +71,7 @@ class CategoryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  "Available", // "Book Now" ki jagah zyada trust-building word
+                  "Available",
                   style: TextStyle(
                     fontSize: 10,
                     color: service.color,

@@ -127,7 +127,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // --- Stats Section with Rating ---
                 StreamBuilder<List<BookingModel>>(
                     stream: StorageService.getBookingsStream(currentUser.id, false),
                     builder: (context, bookingSnap) {
@@ -136,7 +135,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           _buildStatCard("Total Bookings", total.toString()),
-                          // Dynamic Rating Card
                           _buildRatingStatCard(currentUser.averageRating, currentUser.totalReviews),
                           _buildStatCard("Member Since", "2024"),
                         ],
@@ -204,7 +202,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- UI Helpers ---
 
   Widget _buildStatCard(String label, String value) {
     return Column(
@@ -215,7 +212,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Naya Rating Stat Card jo professional check karta hai
   Widget _buildRatingStatCard(double rating, int totalReviews) {
     bool isNew = totalReviews < 3;
     return Column(

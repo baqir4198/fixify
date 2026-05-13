@@ -76,7 +76,6 @@ class StorageService {
       print("Booking ID: ${booking.id}");
       print("Rating: $rating");
 
-      // Call the Supabase function
       final result = await _supabase.rpc('update_booking_rating', params: {
         'p_booking_id': booking.id,
         'p_rating': rating,
@@ -84,7 +83,6 @@ class StorageService {
 
       print("Function result: $result");
 
-      // Verify the update
       if (result != null) {
         final updatedRating = result['provider_rating'];
         print("Updated provider_rating: $updatedRating");
@@ -96,7 +94,6 @@ class StorageService {
         }
       }
 
-      // Update provider's profile rating
       await _updateUserRatingInProfile(
         targetUserId: booking.provider.id,
         newRating: rating,
@@ -111,19 +108,16 @@ class StorageService {
     }
   }
 
-  // Ye function Provider side se call hoga (Rating Dialog par)
   static Future<void> submitRatingForCustomer({
     required String bookingId,
     required String customerId,
     required double rating,
   }) async {
     try {
-      // 1. 'customer_rating' fill karein (Schema Match)
       await _supabase.from('bookings').update({
         'customer_rating': rating,
       }).eq('id', bookingId);
 
-      // 2. Customer ki profile rating update karein
       await _updateUserRatingInProfile(
         targetUserId: customerId,
         newRating: rating,
@@ -135,7 +129,6 @@ class StorageService {
     }
   }
 
-  // Private helper to calculate and update average rating in 'users' table
   static Future<void> _updateUserRatingInProfile({
     required String targetUserId,
     required double newRating,

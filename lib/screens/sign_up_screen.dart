@@ -23,7 +23,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
-  String userRole = "Customer"; // Default role
+  String userRole = "Customer";
   String selectedCategory = "Cleaning";
   final List<String> categories = ["Cleaning", "Plumbing", "Electrician", "Painter", "Carpenter", "AC Repair"];
 
@@ -103,7 +103,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Auth Creation with Metadata
       final AuthResponse res = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -116,7 +115,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       String profileUrl = "";
       String cnicUrl = "";
 
-      // 2. Parallel Images Upload
       if (_profileImage != null) {
         profileUrl = await _uploadToSupabase(_profileImage!, 'profiles', '$uid-profile.jpg');
       }
@@ -125,7 +123,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         cnicUrl = await _uploadToSupabase(_cnicImage!, 'cnics', '$uid-cnic.jpg');
       }
 
-      // 3. Prepare User Object (Updated with 'bio')
       final newUser = ProviderModel(
         id: uid,
         name: name,
@@ -139,16 +136,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         totalReviews: 0,
       );
 
-      // 4. Save to Database with Role Column
       final Map<String, dynamic> dataToInsert = newUser.toMap();
       dataToInsert['role'] = currentRole;
-      dataToInsert['average_rating'] = 5.0; // Ye line add karein
+      dataToInsert['average_rating'] = 5.0;
       dataToInsert['total_reviews'] = 0;
       await supabase.from('users').upsert(dataToInsert);
 
       if (!mounted) return;
 
-      // 5. Logic-Based Navigation
       if (currentRole == "Provider") {
         Navigator.pushAndRemoveUntil(
             context,

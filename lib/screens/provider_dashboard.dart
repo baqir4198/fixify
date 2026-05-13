@@ -28,7 +28,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     currentProvider = widget.provider;
   }
 
-  // --- ACTIONS ---
 
   void acceptRequest(BookingModel booking) async {
     try {
@@ -48,12 +47,10 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     }
   }
 
-  // Pehle ye sirf status update karta tha, ab ye direct rating dialog dikhayega
   void completeJob(BookingModel booking) {
     _showCustomerRatingDialog(booking);
   }
 
-  // --- RATING DIALOG (INTEGRATED LOGIC) ---
 
   void _showCustomerRatingDialog(BookingModel booking) {
     double selectedRating = 5.0;
@@ -103,10 +100,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                 onPressed: isSaving ? null : () async {
                   setDialogState(() => isSaving = true);
                   try {
-                    // 1. Status ko 'Finished' karein taake Customer ko "Rate & Finish" nazar aaye
                     await StorageService.updateBookingStatus(booking.id, 'Finished');
 
-                    // 2. Customer ki rating update karein
                     await StorageService.submitRatingForCustomer(
                       bookingId: booking.id,
                       customerId: booking.customerId,
@@ -170,10 +165,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
 
             final allBookings = snapshot.data ?? [];
 
-            // FILTER LOGIC
             final newRequests = allBookings.where((b) => b.status.toLowerCase().trim() == 'pending').toList();
 
-            // Active Work mein Accepted aur Finished dono dikhayenge
             final activeJobs = allBookings.where((b) {
               final s = b.status.toLowerCase().trim();
               return s == 'accepted' || s == 'finished';
@@ -219,7 +212,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
-  // --- UI WIDGETS ---
 
   Widget _buildHeader() {
     return Row(
@@ -340,7 +332,7 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         subtitle: Text(isFinished ? "Waiting for Customer to Close..." : booking.serviceName,
             style: TextStyle(fontSize: 12, color: isFinished ? Colors.orange : Colors.grey)),
         trailing: isFinished
-            ? const Icon(Icons.check_circle, color: Colors.orange) // Finished ho gaya toh sirf icon
+            ? const Icon(Icons.check_circle, color: Colors.orange)
             : ElevatedButton(
             onPressed: () => completeJob(booking),
             style: ElevatedButton.styleFrom(

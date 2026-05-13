@@ -16,7 +16,6 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
-  // Pages ko list ke bajaye function se lein taake data hamesha fresh rahe
   List<Widget> _getPages() {
     return [
       HomeScreen(user: widget.user),
@@ -28,7 +27,6 @@ class _MainWrapperState extends State<MainWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    // build ke andar pages ko call karein
     final pages = _getPages();
 
     return Scaffold(
