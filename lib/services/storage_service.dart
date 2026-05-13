@@ -67,8 +67,6 @@ class StorageService {
   }
 
   // ================= RATING & COMPLETION (FIXED) =================
-
-  // Old function ko replace karein with this:
   static Future<void> completeAndRateTask({
     required BookingModel booking,
     required double rating,

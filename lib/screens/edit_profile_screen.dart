@@ -17,7 +17,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final supabase = Supabase.instance.client;
 
   late TextEditingController _nameController;
-  late TextEditingController _bioController; // 'about' se 'bio'
+  late TextEditingController _bioController;
   late TextEditingController _rateController;
   late TextEditingController _passwordController;
   late TextEditingController _confirmPasswordController;
@@ -46,14 +46,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // --- Profile Update Logic ---
   void _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Agar password change karna hai toh Auth update karein
       if (_showPasswordFields && _passwordController.text.isNotEmpty) {
         if (_passwordController.text != _confirmPasswordController.text) {
           throw "Passwords do not match!";
@@ -63,8 +61,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ));
       }
 
-      // 2. Database (Public Table) update karein
-      // Hum 'providers' ya 'users' table update kar rahe hain (as per your DB structure)
       final Map<String, dynamic> updateData = {
         'name': _nameController.text.trim(),
         'bio': _bioController.text.trim(),
@@ -72,7 +68,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      // Table name check karlein (users ya providers jo bhi aapne rakha hai)
       await supabase
           .from('users')
           .update(updateData)
@@ -84,7 +79,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         const SnackBar(content: Text("Profile Updated Successfully!"), backgroundColor: Colors.green),
       );
 
-      Navigator.pop(context, true); // True bhejte hain taake pichli screen refresh ho sake
+      Navigator.pop(context, true);
 
     } catch (e) {
       _showError(e.toString());
@@ -93,7 +88,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // --- Logout Logic ---
   void _handleLogout() async {
     bool confirm = await showDialog(
       context: context,

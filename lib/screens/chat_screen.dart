@@ -74,7 +74,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // --- SENDING LOGIC (Synced with Model) ---
   void _handleSend() async {
-    // 1. IDs ko nikaalein aur String mein convert karke trim karein safety ke liye
     String sId = (widget.isProvider
         ? widget.booking.provider.id
         : widget.booking.customerId)
@@ -87,14 +86,12 @@ class _ChatScreenState extends State<ChatScreen> {
         .toString()
         .trim();
 
-    // 2. Debugging: Console mein lazmi check karein ke IDs different hain ya nahi
-    debugPrint("--- CHAT DEBUG ---");
+   debugPrint("--- CHAT DEBUG ---");
     debugPrint("I am Provider: ${widget.isProvider}");
     debugPrint("Sender ID (sId): '$sId'");
     debugPrint("Receiver ID (rId): '$rId'");
     debugPrint("------------------");
 
-    // 3. Logic Check: Agar IDs same hain toh message bhejney ka faida nahi
     if (sId == rId) {
       debugPrint("CRITICAL ERROR: Sender and Receiver IDs are the SAME!");
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,9 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    // 4. Message Sending Process
-    if (_isRecording) {
-      // Audio recording handle karein
+   if (_isRecording) {
       _timer?.cancel();
       final path = await _audioRecorder.stop();
       setState(() => _isRecording = false);
@@ -114,13 +109,10 @@ class _ChatScreenState extends State<ChatScreen> {
         _uploadAndSendMedia(File(path), MessageType.audio, sId, rId);
       }
     } else if (_messageController.text.trim().isNotEmpty) {
-      // Text message handle karein
       String content = _messageController.text.trim();
 
-      // UI foran clear karein taake user ko speed mehsoos ho
       _messageController.clear();
-      setState(() {}); // UI update for mic icon change
-
+      setState(() {});
       _sendMessageToSupabase(content, MessageType.text, sId, rId);
     }
   }
@@ -148,14 +140,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessageToSupabase(String content, MessageType type, String sId, String rId) async {
-    // Sync with MessageModel.toMap()
     final messageData = {
       'booking_id': widget.booking.id,
       'sender_id': sId,
       'receiver_id': rId,
       'content': content,
-      'message_type': type.index, // Sending int as per model
-      'created_at': DateTime.now().toIso8601String(), // Correct column name
+      'message_type': type.index,
+      'created_at': DateTime.now().toIso8601String(),
       'is_seen': false,
     };
 
@@ -191,7 +182,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   .from('messages')
                   .stream(primaryKey: ['id'])
                   .eq('booking_id', widget.booking.id)
-                  .order('created_at', ascending: false), // Using created_at for order
+                  .order('created_at', ascending: false),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(fontSize: 10)));
@@ -224,9 +215,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
-
-  // ... [Baaki saara UI code jo aapne bheja tha wo same rahega]
-  // _buildAppBar, _buildMessageBubble, _buildMessageContent, _buildTimeRow, _buildChatInput, _showPickerMenu, _pickMedia, _startRecording ko end tak paste kar lein.
 
   AppBar _buildAppBar() {
     String name = widget.isProvider ? widget.booking.customerName : widget.booking.provider.name;

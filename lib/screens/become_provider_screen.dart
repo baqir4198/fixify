@@ -42,14 +42,12 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
   Future<String> _uploadFile(File file, String bucket, String fileName) async {
     final String path = '$bucket/$fileName';
 
-    // File upload karein (overwrite true rakha hai takay agar dubara upload ho to replace ho jaye)
     await supabase.storage.from(bucket).upload(
       fileName,
       file,
       fileOptions: const FileOptions(upsert: true),
     );
 
-    // Public URL hasil karein
     return supabase.storage.from(bucket).getPublicUrl(fileName);
   }
 
@@ -70,16 +68,12 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
         String profileUrl = "";
         String cnicUrl = "";
 
-        // 1. Upload Profile Photo to 'profiles' bucket
         if (_profileImage != null) {
           profileUrl = await _uploadFile(_profileImage!, 'profiles', '$uid.jpg');
         }
 
-        // 2. Upload CNIC Photo to 'cnics' bucket
         cnicUrl = await _uploadFile(_cnicImage!, 'cnics', '$uid.jpg');
 
-        // 3. Update Supabase Database ('users' table)
-        // Yahan hum .update() use kar rahe hain kyunke user pehle se customer login hai
         await supabase.from('users').update({
           'name': _nameController.text.trim(),
           'profession': _selectedCategory,
@@ -87,7 +81,7 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
           'image_url': profileUrl,
           'cnic_url': cnicUrl,
           'about': _bioController.text.trim(),
-          'is_provider': true, // Optional: Role identify karne ke liye
+          'is_provider': true,
         }).eq('id', uid);
 
         if (!mounted) return;
@@ -108,7 +102,6 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
     );
   }
 
-  // ... (build methods same rahengi jo aapne design ki hain)
   @override
   Widget build(BuildContext context) {
     return Scaffold(

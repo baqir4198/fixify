@@ -14,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Static Categories list (Icons aur Colors ke liye hum yehi use karenge)
   final List<ServiceModel> categories = [
     ServiceModel(id: '1', name: 'Plumbing', icon: Icons.plumbing, color: Colors.blue),
     ServiceModel(id: '2', name: 'Electrical', icon: Icons.electrical_services, color: Colors.orange),
@@ -28,10 +27,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Safely handling name parsing
     String firstName = widget.user.name.split(' ').first;
 
-    // Search filter logic
     final filteredCategories = categories
         .where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase()))
         .toList();
@@ -41,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // Elegant Header with Notification Badge
           SliverAppBar(
             floating: true,
             pinned: true,
@@ -83,12 +79,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 25),
 
-                  // Search Bar with enhanced UI
                   _buildSearchBar(),
 
                   const SizedBox(height: 25),
 
-                  // Interactive Discount Card
                   _buildDiscountBanner(),
 
                   const SizedBox(height: 30),
@@ -108,7 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Dynamic Grid View
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
             sliver: filteredCategories.isEmpty
