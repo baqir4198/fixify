@@ -5,8 +5,8 @@ class ProviderModel {
   final String name;
   final String email;
   final String profession;
-  double averageRating; // 'rating' ko 'averageRating' kar diya taake DB se match ho
-  final int totalReviews; // Naya field reviews count ke liye
+  double averageRating;
+  final int totalReviews;
   final double pricePerHour;
   String imageUrl;
   final String cnicUrl;
@@ -25,40 +25,42 @@ class ProviderModel {
     required this.bio,
   });
 
-  // --- SUPABASE SE DATA LENE KE LIYE ---
+  // --- SUPABASE SE DATA LENE KE LIYE (FIXED) ---
   factory ProviderModel.fromMap(Map<String, dynamic> map, {String? docId}) {
+    // Debugging ke liye: print("Mapping Provider: ${map['id']}");
     return ProviderModel(
       id: docId ?? (map['id']?.toString() ?? ''),
       name: map['name']?.toString() ?? 'Unknown User',
       email: map['email']?.toString() ?? '',
-      profession: map['profession']?.toString() ?? 'Customer',
-      // DB columns 'average_rating' aur 'total_reviews' se mapping
+      profession: map['profession']?.toString() ?? 'Technician',
+      // Schema match: average_rating
       averageRating: _toDouble(map['average_rating'] ?? map['rating']),
-      totalReviews: map['total_reviews'] ?? 0,
-      pricePerHour: _toDouble(map['price_per_hour']),
+      totalReviews: map['total_reviews'] is int ? map['total_reviews'] : (int.tryParse(map['total_reviews']?.toString() ?? '0') ?? 0),
+      pricePerHour: _toDouble(map['price_per_hour'] ?? map['pricePerHour']),
       imageUrl: map['image_url']?.toString() ?? map['imageUrl']?.toString() ?? 'https://via.placeholder.com/150',
       cnicUrl: map['cnic_url']?.toString() ?? '',
       bio: map['bio']?.toString() ?? (map['about']?.toString() ?? 'No description provided.'),
     );
   }
 
-  // --- SUPABASE MEIN SAVE/UPDATE KARNE KE LIYE ---
+  // --- SUPABASE MEIN SAVE/UPDATE KARNE KE LIYE (FIXED) ---
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
       'email': email,
       'profession': profession,
-      'average_rating': averageRating,
+      'average_rating': averageRating, // Must match Capture2.PNG
       'total_reviews': totalReviews,
       'price_per_hour': pricePerHour,
       'image_url': imageUrl,
       'cnic_url': cnicUrl,
       'bio': bio,
-      'updated_at': DateTime.now().toIso8601String(),
+      // 'updated_at' column agar DB mein hai toh ye sahi hai
     };
   }
 
+  // Robust double conversion taake null ya string par crash na ho
   static double _toDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is int) return value.toDouble();

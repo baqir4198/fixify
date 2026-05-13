@@ -31,32 +31,33 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
   // --- ACTIONS ---
 
   void acceptRequest(BookingModel booking) async {
-    await StorageService.updateBookingStatus(booking.id, 'Accepted');
-    _showSnackBar("Job Accepted!", Colors.blue);
-  }
-
-  void completeJob(BookingModel booking) async {
     try {
-      await StorageService.updateBookingStatus(booking.id, 'Finished');
-      _showSnackBar("Job marked as Finished! Awaiting customer rating.", Colors.blue);
-      if (mounted) {
-        _showCustomerRatingDialog(booking);
-      }
+      await StorageService.updateBookingStatus(booking.id, 'Accepted');
+      _showSnackBar("Job Accepted!", Colors.blue);
     } catch (e) {
       _showSnackBar("Error: $e", Colors.red);
     }
   }
 
   void declineRequest(BookingModel booking) async {
-    // Status 'Declined' karne se ye 'pending' list se nikal jayega
-    await StorageService.updateBookingStatus(booking.id, 'Declined');
-    _showSnackBar("Request Declined.", Colors.red);
+    try {
+      await StorageService.updateBookingStatus(booking.id, 'Declined');
+      _showSnackBar("Request Declined.", Colors.red);
+    } catch (e) {
+      _showSnackBar("Error: $e", Colors.red);
+    }
   }
 
-  // --- RATING DIALOG ---
+  // Pehle ye sirf status update karta tha, ab ye direct rating dialog dikhayega
+  void completeJob(BookingModel booking) {
+    _showCustomerRatingDialog(booking);
+  }
+
+  // --- RATING DIALOG (INTEGRATED LOGIC) ---
 
   void _showCustomerRatingDialog(BookingModel booking) {
     double selectedRating = 5.0;
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -82,27 +83,50 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
                         color: Colors.orange,
                         size: 32,
                       ),
-                      onPressed: () => setDialogState(() => selectedRating = index + 1.0),
+                      onPressed: isSaving ? null : () => setDialogState(() => selectedRating = index + 1.0),
                     );
                   }),
                 ),
+                if (isSaving)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: CircularProgressIndicator(),
+                  ),
               ],
             ),
             actions: [
-              Center(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    await StorageService.submitRating(
+              TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text("Cancel")
+              ),
+              ElevatedButton(
+                onPressed: isSaving ? null : () async {
+                  setDialogState(() => isSaving = true);
+                  try {
+                    // 1. Status ko 'Finished' karein taake Customer ko "Rate & Finish" nazar aaye
+                    await StorageService.updateBookingStatus(booking.id, 'Finished');
+
+                    // 2. Customer ki rating update karein
+                    await StorageService.submitRatingForCustomer(
                       bookingId: booking.id,
-                      targetUserId: booking.customerId,
+                      customerId: booking.customerId,
                       rating: selectedRating,
-                      ratingForProvider: false,
                     );
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text("Submit Rating", style: TextStyle(color: Colors.white)),
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      _showSnackBar("Job Finished & Customer Rated!", Colors.green);
+                    }
+                  } catch (e) {
+                    setDialogState(() => isSaving = false);
+                    _showSnackBar("Error: $e", Colors.red);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
                 ),
+                child: const Text("Submit Rating", style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -146,11 +170,10 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
 
             final allBookings = snapshot.data ?? [];
 
-            // FILTER LOGIC (Airtight Fix):
-            // Sirf wahi dikhao jo Pending hain. Declined ya Cancelled yahan se hat jayenge.
+            // FILTER LOGIC
             final newRequests = allBookings.where((b) => b.status.toLowerCase().trim() == 'pending').toList();
 
-            // Sirf Accepted aur Finished dikhao. Cancelled ya Completed yahan se foran hat jayenge.
+            // Active Work mein Accepted aur Finished dono dikhayenge
             final activeJobs = allBookings.where((b) {
               final s = b.status.toLowerCase().trim();
               return s == 'accepted' || s == 'finished';
@@ -195,6 +218,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
       ),
     );
   }
+
+  // --- UI WIDGETS ---
 
   Widget _buildHeader() {
     return Row(
@@ -312,16 +337,18 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
             child: Icon(isFinished ? Icons.hourglass_bottom : Icons.bolt, color: Colors.white)
         ),
         title: Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(isFinished ? "Waiting for Customer Rating..." : booking.serviceName,
+        subtitle: Text(isFinished ? "Waiting for Customer to Close..." : booking.serviceName,
             style: TextStyle(fontSize: 12, color: isFinished ? Colors.orange : Colors.grey)),
-        trailing: ElevatedButton(
-            onPressed: isFinished ? () => _showCustomerRatingDialog(booking) : () => completeJob(booking),
+        trailing: isFinished
+            ? const Icon(Icons.check_circle, color: Colors.orange) // Finished ho gaya toh sirf icon
+            : ElevatedButton(
+            onPressed: () => completeJob(booking),
             style: ElevatedButton.styleFrom(
-                backgroundColor: isFinished ? Colors.orange : Colors.green,
+                backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
             ),
-            child: Text(isFinished ? "Rate Again" : "Finish")),
+            child: const Text("Finish")),
       ),
     );
   }

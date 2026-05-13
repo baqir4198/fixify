@@ -17,8 +17,6 @@ class MyBookingsScreen extends StatefulWidget {
 
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
   final String currentUserId = supabase.auth.currentUser?.id ?? "";
-
-  // Ziddi UI ko refresh karne ke liye ek counter
   int refreshCounter = 0;
 
   void _forceRefresh() {
@@ -34,7 +32,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF0F2F5),
         appBar: AppBar(
-          title: const Text("My Appointments", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+          title: const Text("My Appointments",
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
           backgroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
@@ -50,11 +49,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           ),
         ),
         body: StreamBuilder<List<BookingModel>>(
-          // Key badalne se StreamBuilder poora refresh hota hai
           key: ValueKey(refreshCounter),
           stream: StorageService.getBookingsStream(currentUserId, false),
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
             if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
 
             final allBookings = snapshot.data ?? [];
@@ -62,8 +62,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             return TabBarView(
               children: [
                 _buildBookingList(allBookings, ['pending']),
+                // 'finished' yahan hona zaroori hai taake Customer rate kar sakay
                 _buildBookingList(allBookings, ['accepted', 'finished']),
-                _buildBookingList(allBookings, ['completed', 'cancelled','declined']),
+                _buildBookingList(allBookings, ['completed', 'cancelled', 'declined']),
               ],
             );
           },
@@ -90,14 +91,20 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     String status = booking.status.toLowerCase();
     bool isFinished = status == 'finished';
     bool isPending = status == 'pending';
-    bool isHistory = status == 'completed' || status == 'cancelled';
+    bool isHistory = status == 'completed' || status == 'cancelled' || status == 'declined';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4)
+          )
+        ],
       ),
       child: Column(
         children: [
@@ -107,11 +114,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text(booking.provider.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                Expanded(
+                    child: Text(booking.provider.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+                ),
                 _statusBadge(booking.status),
               ],
             ),
-            subtitle: Text(booking.serviceName, style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w500)),
+            subtitle: Text(booking.serviceName,
+                style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w500)),
           ),
 
           if (!isHistory)
@@ -121,10 +132,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(booking: booking))),
+                      onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => ChatScreen(booking: booking))
+                      ),
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
                       label: const Text("Message"),
-                      style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                      style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                      ),
                     ),
                   ),
                   if (isFinished || isPending) const SizedBox(width: 12),
@@ -133,8 +149,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () => _showRatingDialog(context, booking),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                        child: const Text("Rate & Finish", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                        ),
+                        child: const Text("Rate & Finish",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
 
@@ -145,7 +165,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                           await StorageService.updateBookingStatus(booking.id, 'Cancelled');
                           _forceRefresh();
                         },
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                        ),
                         child: const Text("Cancel"),
                       ),
                     ),
@@ -172,37 +196,64 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text("How was your experience?"),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (index) {
                   return GestureDetector(
-                    onTap: () => setDialogState(() => selectedRating = index + 1.0),
+                    onTap: isSubmitting
+                        ? null
+                        : () => setDialogState(() => selectedRating = index + 1.0),
                     child: Icon(
                       index < selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
-                      color: Colors.orange, size: 35,
+                      color: Colors.orange,
+                      size: 40,
                     ),
                   );
                 }),
               ),
+              if (isSubmitting)
+                const Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: CircularProgressIndicator(),
+                ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Skip")),
+            TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text("Skip")
+            ),
             ElevatedButton(
               onPressed: isSubmitting ? null : () async {
                 setDialogState(() => isSubmitting = true);
                 try {
-                  await StorageService.completeAndRateTask(booking: booking, rating: selectedRating);
+                  // Customer rating bhej raha hai jo DB mein provider_rating column mein jayegi
+                  await StorageService.completeAndRateTask(
+                      booking: booking,
+                      rating: selectedRating
+                  );
+
                   if (mounted) {
                     Navigator.pop(context);
-                    _forceRefresh(); // Ye hai asli dhaka!
+                    _forceRefresh();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text("Job Completed Successfully!"),
+                            backgroundColor: Colors.green
+                        )
+                    );
                   }
                 } catch (e) {
+                  print("Rating Submission Error: $e");
                   setDialogState(() => isSubmitting = false);
                 }
               },
-              child: const Text("Submit"),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+              ),
+              child: const Text("Submit", style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -213,25 +264,46 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   Widget _buildAvatar(BookingModel booking) {
     return Container(
       width: 60, height: 60,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), color: Colors.blue[50]),
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          color: Colors.blue[50]
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: booking.provider.imageUrl.isEmpty
             ? const Icon(Icons.person, color: Colors.blue, size: 30)
-            : Image.network(booking.provider.imageUrl, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.grey)),
+            : Image.network(
+            booking.provider.imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.grey)
+        ),
       ),
     );
   }
 
   Widget _statusBadge(String status) {
     String s = status.toLowerCase();
-    Color color = s == 'accepted' ? Colors.blue : (s == 'completed' ? Colors.green : (s == 'cancelled' ? Colors.red : Colors.orange));
+    Color color;
+    if (s == 'accepted') color = Colors.blue;
+    else if (s == 'finished') color = Colors.purple;
+    else if (s == 'completed') color = Colors.green;
+    else if (s == 'cancelled' || s == 'declined') color = Colors.red;
+    else color = Colors.orange;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8)
+      ),
+      child: Text(
+          status.toUpperCase(),
+          style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)
+      ),
     );
   }
 
-  Widget _buildEmptyState() => Center(child: Text("No appointments", style: TextStyle(color: Colors.grey[400])));
+  Widget _buildEmptyState() => const Center(
+      child: Text("No appointments found", style: TextStyle(color: Colors.grey))
+  );
 }

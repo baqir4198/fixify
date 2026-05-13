@@ -54,12 +54,10 @@ class StorageService {
 
   static Future<void> updateBookingStatus(String id, String newStatus) async {
     try {
-      // .select() lagane se real-time update trigger hone ke chances barh jate hain
       await _supabase
           .from('bookings')
           .update({'status': newStatus})
-          .eq('id', id)
-          .select();
+          .eq('id', id);
 
       print("Database Status Successfully Updated to: $newStatus");
     } catch (e) {
@@ -68,60 +66,101 @@ class StorageService {
     }
   }
 
-  // ================= RATING & COMPLETION =================
+  // ================= RATING & COMPLETION (FIXED) =================
 
+  // Old function ko replace karein with this:
   static Future<void> completeAndRateTask({
     required BookingModel booking,
     required double rating,
   }) async {
     try {
-      // Pehle status update karein
-      await updateBookingStatus(booking.id, 'Completed');
+      print("=== Calling update_booking_rating function ===");
+      print("Booking ID: ${booking.id}");
+      print("Rating: $rating");
 
-      // Phir rating submit karein
-      await submitRating(
-        bookingId: booking.id,
+      // Call the Supabase function
+      final result = await _supabase.rpc('update_booking_rating', params: {
+        'p_booking_id': booking.id,
+        'p_rating': rating,
+      });
+
+      print("Function result: $result");
+
+      // Verify the update
+      if (result != null) {
+        final updatedRating = result['provider_rating'];
+        print("Updated provider_rating: $updatedRating");
+
+        if (updatedRating == rating) {
+          print("✅ Rating saved successfully!");
+        } else {
+          print("⚠️ Rating mismatch - Expected: $rating, Got: $updatedRating");
+        }
+      }
+
+      // Update provider's profile rating
+      await _updateUserRatingInProfile(
         targetUserId: booking.provider.id,
-        rating: rating,
-        ratingForProvider: true,
+        newRating: rating,
       );
-    } catch (e) {
-      print("Error in completeAndRateTask: $e");
+
+      print("Job Completed and Provider Rated: $rating");
+
+    } catch (e, stacktrace) {
+      print("❌ Error in completeAndRateTask: $e");
+      print("Stacktrace: $stacktrace");
+      rethrow;
     }
   }
 
-  static Future<void> submitRating({
+  // Ye function Provider side se call hoga (Rating Dialog par)
+  static Future<void> submitRatingForCustomer({
     required String bookingId,
-    required String targetUserId,
+    required String customerId,
     required double rating,
-    required bool ratingForProvider,
   }) async {
     try {
-      String ratingCol = ratingForProvider ? 'provider_rating' : 'customer_rating';
+      // 1. 'customer_rating' fill karein (Schema Match)
+      await _supabase.from('bookings').update({
+        'customer_rating': rating,
+      }).eq('id', bookingId);
 
-      // Update rating in booking
-      await _supabase.from('bookings').update({ratingCol: rating}).eq('id', bookingId).select();
+      // 2. Customer ki profile rating update karein
+      await _updateUserRatingInProfile(
+        targetUserId: customerId,
+        newRating: rating,
+      );
 
-      // Get user data to update average
+      print("Customer Rated by Provider: $rating");
+    } catch (e) {
+      print("Error in submitRatingForCustomer: $e");
+    }
+  }
+
+  // Private helper to calculate and update average rating in 'users' table
+  static Future<void> _updateUserRatingInProfile({
+    required String targetUserId,
+    required double newRating,
+  }) async {
+    try {
       final userData = await _supabase
           .from('users')
           .select('average_rating, total_reviews')
           .eq('id', targetUserId)
           .single();
 
-      double currentAvg = (userData['average_rating'] ?? 5.0).toDouble();
-      int totalReviews = userData['total_reviews'] ?? 0;
+      double currentAvg = (userData['average_rating'] as num?)?.toDouble() ?? 5.0;
+      int totalReviews = (userData['total_reviews'] as int?) ?? 0;
 
       int newTotalReviews = totalReviews + 1;
-      double newAverage = ((currentAvg * totalReviews) + rating) / newTotalReviews;
+      double newAverage = ((currentAvg * totalReviews) + newRating) / newTotalReviews;
 
       await _supabase.from('users').update({
         'average_rating': newAverage,
         'total_reviews': newTotalReviews,
-      }).eq('id', targetUserId).select();
-
+      }).eq('id', targetUserId);
     } catch (e) {
-      print("Error in submitRating: $e");
+      print("Profile Rating Update Error: $e");
     }
   }
 
@@ -133,7 +172,7 @@ class StorageService {
           .eq('id', customerId)
           .single();
       return {
-        'average_rating': (data['average_rating'] ?? 5.0).toDouble(),
+        'average_rating': (data['average_rating'] as num?)?.toDouble() ?? 5.0,
         'total_reviews': data['total_reviews'] ?? 0,
       };
     } catch (e) {

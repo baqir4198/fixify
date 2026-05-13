@@ -11,10 +11,11 @@ class BookingModel {
   final String price;
   final String status;
 
-  // --- Rating Fields ---
+  // --- Schema Based Rating Fields ---
+  final double? providerRating;
+  final double? customerRating;
   final double? customerAverageRating;
   final int? customerTotalReviews;
-  final double? providerRatingGiven;
 
   BookingModel({
     required this.id,
@@ -26,18 +27,16 @@ class BookingModel {
     required this.serviceName,
     required this.price,
     required this.status,
+    this.providerRating,
+    this.customerRating,
     this.customerAverageRating,
     this.customerTotalReviews,
-    this.providerRatingGiven,
   });
 
   factory BookingModel.fromMap(Map<String, dynamic> map) {
-    // Status ko handle karne ka sab se safe tareeka
-    String rawStatus = map['status']?.toString() ?? 'Pending';
-
     return BookingModel(
       id: map['id'] ?? '',
-      // Provider data agar string format mein aaye ya map mein, dono handle ho jayenge
+      // Ensure provider data is handled correctly
       provider: ProviderModel.fromMap(map['provider_data'] ?? {}),
       customerName: map['customer_name'] ?? '',
       customerId: map['customer_id'] ?? '',
@@ -45,43 +44,40 @@ class BookingModel {
       time: map['booking_time'] ?? '',
       serviceName: map['service_name'] ?? '',
       price: map['price']?.toString() ?? '0',
-      // Trim zaroori hai taake "Pending " aur "Pending" ka faraq khatam ho jaye
-      status: rawStatus.trim(),
+      status: (map['status']?.toString() ?? 'Pending').trim(),
 
-      customerAverageRating: _toDouble(map['customer_rating_at_time'] ?? map['customer_average_rating']),
+      // Mapping from Capture2.PNG (Keeping them nullable for DB consistency)
+      providerRating: _toDouble(map['provider_rating']),
+      customerRating: _toDouble(map['customer_rating']),
+      customerAverageRating: _toDouble(map['customer_average_rating']),
       customerTotalReviews: map['customer_total_reviews'] as int?,
-      providerRatingGiven: _toDouble(map['customer_rating']),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      // ID auto-generate hoti hai DB mein isliye yahan se nahi bhej rahe
       'customer_name': customerName,
       'customer_id': customerId,
       'booking_date': date.toIso8601String(),
       'booking_time': time,
       'service_name': serviceName,
       'price': price,
-      'status': status, // Status hamesha update ho kar jayega
+      'status': status,
       'provider_id': provider.id,
+      // Important: provider_data agar JSON column hai tabhi bhejein
       'provider_data': provider.toMap(),
-      'customer_average_rating': customerAverageRating,
-      'customer_total_reviews': customerTotalReviews,
+      'provider_rating': providerRating,
+      'customer_rating': customerRating,
+      // Inko toMap mein shamil rakhen taake update queries mein asani ho
     };
   }
 
-  static double _toDouble(dynamic value) {
-    if (value == null) return 0.0;
+  // FIXED: Return null if value is null, don't force 0.0
+  static double? _toDouble(dynamic value) {
+    if (value == null) return null;
     if (value is int) return value.toDouble();
     if (value is double) return value;
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
+    if (value is String) return double.tryParse(value);
+    return null;
   }
-
-  // Helper method taake code mein status check karna asaan ho
-  bool get isCancelled => status.toLowerCase() == 'cancelled';
-  bool get isCompleted => status.toLowerCase() == 'completed';
-  bool get isPending => status.toLowerCase() == 'pending';
-  bool get isAccepted => status.toLowerCase() == 'accepted';
 }
