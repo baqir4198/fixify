@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Screens & Models
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/login_screen.dart';
 import 'package:handyman_app/screens/main_wrapper.dart';
@@ -69,17 +68,14 @@ class AuthWrapper extends StatelessWidget {
               }
 
               if (userSnapshot.hasData && userSnapshot.data != null) {
-                // 1. Data model mein load karein
                 final userData = ProviderModel.fromMap(
                   userSnapshot.data!,
                 );
 
-                // 2. Role fetch karein (Table mein column ka naam 'role' hona chahiye)
                 final String role = userSnapshot.data!['role'] ?? 'Customer';
 
                 print("DEBUG: App Start - User Role is: $role");
 
-                // 3. Role ke mutabiq sahi screen par bhejein
                 if (role == 'Provider') {
                   return ProviderDashboard(provider: userData);
                 } else {
@@ -87,13 +83,11 @@ class AuthWrapper extends StatelessWidget {
                 }
               }
 
-              // Agar session hai magar DB mein entry nahi mili
               return const LoginScreen();
             },
           );
         }
 
-        // Agar user login nahi hai
         return const LoginScreen();
       },
     );

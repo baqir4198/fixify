@@ -21,21 +21,18 @@ class MessageModel {
     this.isSeen = false,
   });
 
-  // --- SUPABASE MEIN SAVE KARNE KE LIYE ---
-  Map<String, dynamic> toMap() {
+ Map<String, dynamic> toMap() {
     return {
-      // 'id' hum aksar omit kar dete hain agar Supabase UUID generate kar raha ho
       'booking_id': bookingId,
       'sender_id': senderId,
       'receiver_id': receiverId,
       'content': content,
-      'message_type': type.index, // 'type' reserved word ho sakta hai SQL mein
-      'created_at': timestamp.toIso8601String(), // Standard Supabase naming
+      'message_type': type.index,
+      'created_at': timestamp.toIso8601String(),
       'is_seen': isSeen,
     };
   }
 
-  // --- SUPABASE SE DATA LENE KE LIYE ---
   factory MessageModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return MessageModel(
       id: docId ?? (map['id']?.toString() ?? ''),
@@ -44,12 +41,10 @@ class MessageModel {
       receiverId: map['receiver_id']?.toString() ?? '',
       content: map['content']?.toString() ?? '',
 
-      // Enum Safety: Supabase se index int ki tarah aata hai
       type: (map['message_type'] != null && map['message_type'] < MessageType.values.length)
           ? MessageType.values[map['message_type']]
           : MessageType.text,
 
-      // Supabase hamesha ISO8601 String bhejta hai
       timestamp: map['created_at'] != null
           ? DateTime.parse(map['created_at'])
           : DateTime.now(),

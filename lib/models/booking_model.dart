@@ -36,7 +36,6 @@ class BookingModel {
   factory BookingModel.fromMap(Map<String, dynamic> map) {
     return BookingModel(
       id: map['id'] ?? '',
-      // Ensure provider data is handled correctly
       provider: ProviderModel.fromMap(map['provider_data'] ?? {}),
       customerName: map['customer_name'] ?? '',
       customerId: map['customer_id'] ?? '',
@@ -46,7 +45,6 @@ class BookingModel {
       price: map['price']?.toString() ?? '0',
       status: (map['status']?.toString() ?? 'Pending').trim(),
 
-      // Mapping from Capture2.PNG (Keeping them nullable for DB consistency)
       providerRating: _toDouble(map['provider_rating']),
       customerRating: _toDouble(map['customer_rating']),
       customerAverageRating: _toDouble(map['customer_average_rating']),
@@ -64,15 +62,12 @@ class BookingModel {
       'price': price,
       'status': status,
       'provider_id': provider.id,
-      // Important: provider_data agar JSON column hai tabhi bhejein
-      'provider_data': provider.toMap(),
+     'provider_data': provider.toMap(),
       'provider_rating': providerRating,
       'customer_rating': customerRating,
-      // Inko toMap mein shamil rakhen taake update queries mein asani ho
-    };
+      };
   }
 
-  // FIXED: Return null if value is null, don't force 0.0
   static double? _toDouble(dynamic value) {
     if (value == null) return null;
     if (value is int) return value.toDouble();
