@@ -12,6 +12,10 @@ class ProviderModel {
   final String cnicUrl;
   final String bio;
 
+  // --- Naye Location Fields ---
+  final double? latitude;
+  final double? longitude;
+
   ProviderModel({
     required this.id,
     required this.name,
@@ -23,6 +27,8 @@ class ProviderModel {
     required this.imageUrl,
     required this.cnicUrl,
     required this.bio,
+    this.latitude,  // Optional rkha h taake purana data ya customer model crash na kre
+    this.longitude, // Optional rkha h
   });
 
   factory ProviderModel.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -37,6 +43,10 @@ class ProviderModel {
       imageUrl: map['image_url']?.toString() ?? map['imageUrl']?.toString() ?? 'https://via.placeholder.com/150',
       cnicUrl: map['cnic_url']?.toString() ?? '',
       bio: map['bio']?.toString() ?? (map['about']?.toString() ?? 'No description provided.'),
+
+      // --- Supabase se map krte waqt safely double convert krna ---
+      latitude: map['latitude'] != null ? _toDouble(map['latitude']) : null,
+      longitude: map['longitude'] != null ? _toDouble(map['longitude']) : null,
     );
   }
 
@@ -52,6 +62,10 @@ class ProviderModel {
       'image_url': imageUrl,
       'cnic_url': cnicUrl,
       'bio': bio,
+
+      // --- Database me push krne k liye keys ---
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 
@@ -71,6 +85,8 @@ class ProviderModel {
     String? profession,
     double? averageRating,
     int? totalReviews,
+    double? latitude,
+    double? longitude,
   }) {
     return ProviderModel(
       id: id,
@@ -83,6 +99,8 @@ class ProviderModel {
       imageUrl: imageUrl ?? this.imageUrl,
       cnicUrl: cnicUrl,
       bio: bio ?? this.bio,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 

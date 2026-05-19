@@ -77,5 +77,10 @@
        <string>UIInterfaceOrientationLandscapeLeft</string>
        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Fixify needs access to your location to find and connect you with nearby service providers.</string>
+
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Fixify needs access to your location to track the provider's distance even when the app is in background.</string>
 </dict>
 </plist>

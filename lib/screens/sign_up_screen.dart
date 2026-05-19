@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart'; // Naya package address conversion k liye
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:handyman_app/models/provider_model.dart';
@@ -23,6 +25,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
+  // Naye controllers user k asani k liye
+  final _cityController = TextEditingController();
+  final _addressController = TextEditingController();
+
+  // Background controllers jo database me value bhejein ge
+  String _detectedLatitude = "";
+  String _detectedLongitude = "";
+
   String userRole = "Customer";
   String selectedCategory = "Cleaning";
   final List<String> categories = ["Cleaning", "Plumbing", "Electrician", "Painter", "Carpenter", "AC Repair"];
@@ -30,6 +40,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _profileImage;
   File? _cnicImage;
   bool _isLoading = false;
+  bool _isFetchingLocation = false;
 
   @override
   void dispose() {
@@ -38,7 +49,77 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _costController.dispose();
+    _cityController.dispose();
+    _addressController.dispose();
     super.dispose();
+  }
+
+  // --- Automatic Location Fetching ---
+  Future<void> _autoFetchLocation() async {
+    setState(() => _isFetchingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showError("Your device GPS is turned off. Please turn it on or enter address manually.");
+        setState(() => _isFetchingLocation = false);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showError("Location permission denied.");
+          setState(() => _isFetchingLocation = false);
+          return;
+        }
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Background variables me save kr lia
+      _detectedLatitude = position.latitude.toString();
+      _detectedLongitude = position.longitude.toString();
+
+      // Reverse Geocoding: Coordinates se city aur address khud dhoondna
+      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        setState(() {
+          _cityController.text = place.locality ?? "";
+          _addressController.text = "${place.street ?? ''}, ${place.subLocality ?? ''}".trim();
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Location & Address fetched automatically!"),
+        backgroundColor: Colors.green,
+      ));
+
+    } catch (e) {
+      _showError("Could not fetch location automatically: $e");
+    } finally {
+      setState(() => _isFetchingLocation = false);
+    }
+  }
+
+  // --- Manual Address ko Coordinates me badalna ---
+  Future<bool> _convertAddressToCoordinates() async {
+    String fullAddress = "${_addressController.text.trim()}, ${_cityController.text.trim()}";
+    try {
+      List<Location> locations = await locationFromAddress(fullAddress);
+      if (locations.isNotEmpty) {
+        _detectedLatitude = locations[0].latitude.toString();
+        _detectedLongitude = locations[0].longitude.toString();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Geocoding Error: $e");
+      return false;
+    }
   }
 
   Future<void> _pickImage(bool isProfile) async {
@@ -65,7 +146,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         bytes,
         fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
       );
-
       if (bucket == 'profiles') {
         return supabase.storage.from(bucket).getPublicUrl(fileName);
       } else {
@@ -95,12 +175,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showError("Passwords do not match!");
       return;
     }
-    if (currentRole == "Provider" && _cnicImage == null) {
-      _showError("Please upload CNIC photo for verification!");
-      return;
+
+    // Provider validations
+    if (currentRole == "Provider") {
+      if (_cnicImage == null) {
+        _showError("Please upload CNIC photo for verification!");
+        return;
+      }
+      if (_cityController.text.trim().isEmpty || _addressController.text.trim().isEmpty) {
+        _showError("Please fill your City and Address!");
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
+
+    double latitude = 0.0;
+    double longitude = 0.0;
+
+    if (currentRole == "Provider") {
+      // Agar user ne manual text likha tha aur auto GPS pick nahi kiya tha
+      if (_detectedLatitude.isEmpty || _detectedLongitude.isEmpty) {
+        bool success = await _convertAddressToCoordinates();
+        if (!success) {
+          setState(() => _isLoading = false);
+          _showError("Could not find coordinates for this address. Please write a valid city/area name.");
+          return;
+        }
+      }
+      latitude = double.tryParse(_detectedLatitude) ?? 0.0;
+      longitude = double.tryParse(_detectedLongitude) ?? 0.0;
+    }
 
     try {
       final AuthResponse res = await supabase.auth.signUp(
@@ -134,12 +239,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
         bio: currentRole == "Provider" ? "Professional $selectedCategory provider." : "Customer Account",
         averageRating: 5.0,
         totalReviews: 0,
+        latitude: latitude,
+        longitude: longitude,
       );
 
       final Map<String, dynamic> dataToInsert = newUser.toMap();
       dataToInsert['role'] = currentRole;
       dataToInsert['average_rating'] = 5.0;
       dataToInsert['total_reviews'] = 0;
+
+      // Address string format me save krwane k liye extra columns add kr skte hain bad me
+      dataToInsert['latitude'] = latitude;
+      dataToInsert['longitude'] = longitude;
+
       await supabase.from('users').upsert(dataToInsert);
 
       if (!mounted) return;
@@ -180,11 +292,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     bool isProvider = userRole == "Provider";
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: const BackButton(color: Colors.black)
-      ),
+      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, leading: const BackButton(color: Colors.black)),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -221,7 +329,41 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 15),
             _buildTextField(_emailController, "Email", Icons.email_outlined, isEmail: true),
             const SizedBox(height: 15),
+
+            // --- Location Section (Sirf Provider k liye) ---
             if (isProvider) ...[
+              const Text("Provider Location Setup", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[50],
+                        foregroundColor: Colors.blue[800],
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _isFetchingLocation ? null : _autoFetchLocation,
+                      icon: _isFetchingLocation
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.my_location),
+                      label: const Text("Auto GPS Location Pick"),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _buildTextField(_cityController, "City (e.g. Lahore)", Icons.location_city)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildTextField(_addressController, "Area / Street Address", Icons.home_outlined)),
+                ],
+              ),
+              const SizedBox(height: 15),
+
               _buildCategoryDropdown(),
               const SizedBox(height: 15),
               _buildTextField(_costController, "Hourly Rate (Rs.)", Icons.payments_outlined, isNumber: true),
@@ -245,6 +387,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const SizedBox(height: 20),
             ],
+
             _buildTextField(_passwordController, "Password", Icons.lock_outline, isObscure: true),
             const SizedBox(height: 15),
             _buildTextField(_confirmPasswordController, "Confirm Password", Icons.lock_reset, isObscure: true),
@@ -269,7 +412,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
     bool isSelected = userRole == role;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => userRole = role),
+        onTap: () => setState(() => {
+          userRole = role,
+          // Role change krne par controllers clear ho jyen ge
+          if(role == "Customer") {
+            _cityController.clear(),
+            _addressController.clear(),
+            _detectedLatitude = "",
+            _detectedLongitude = ""
+          }
+        }),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 15),
           decoration: BoxDecoration(
@@ -305,7 +457,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return TextField(
       controller: controller,
       obscureText: isObscure,
-      keyboardType: isNumber ? TextInputType.number : (isEmail ? TextInputType.emailAddress : TextInputType.text),
+      keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : (isEmail ? TextInputType.emailAddress : TextInputType.text),
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: Colors.blueGrey),
         hintText: hint,

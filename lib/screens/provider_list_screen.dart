@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart'; // --- Distance nikalne k liye package ---
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/provider_detail_screen.dart';
@@ -9,7 +10,16 @@ final supabase = Supabase.instance.client;
 
 class ProviderListScreen extends StatefulWidget {
   final String categoryName;
-  const ProviderListScreen({super.key, required this.categoryName});
+  // --- HomeScreen se bhejay gaye coordinates accept krne k liye variables ---
+  final double? customerLatitude;
+  final double? customerLongitude;
+
+  const ProviderListScreen({
+    super.key,
+    required this.categoryName,
+    this.customerLatitude,
+    this.customerLongitude,
+  });
 
   @override
   State<ProviderListScreen> createState() => _ProviderListScreenState();
@@ -17,7 +27,25 @@ class ProviderListScreen extends StatefulWidget {
 
 class _ProviderListScreenState extends State<ProviderListScreen> {
   String _searchQuery = "";
-  String _activeSort = "Rating";
+  String _activeSort = "Distance"; // Default sort ab Distance pr set kr dia h
+
+  // Helper function: Distance calculation k liye (Safe Version)
+  double _calculateDistance(double providerLat, double providerLng) {
+    final double? lat = widget.customerLatitude;
+    final double? lng = widget.customerLongitude;
+
+    if (lat == null || lng == null || (providerLat == 0.0 && providerLng == 0.0)) {
+      return -1.0;
+    }
+
+    double distanceInMeters = Geolocator.distanceBetween(
+      lat,
+      lng,
+      providerLat,
+      providerLng,
+    );
+    return distanceInMeters / 1000; // Kilometers me convert kia
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,13 +80,19 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildSortChip("Rating", Icons.star_rounded),
-                    const SizedBox(width: 12),
-                    _buildSortChip("Price", Icons.payments_rounded),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildSortChip("Distance", Icons.location_on_rounded),
+                      const SizedBox(width: 10),
+                      _buildSortChip("Rating", Icons.star_rounded),
+                      const SizedBox(width: 10),
+                      _buildSortChip("Price", Icons.payments_rounded),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -78,20 +112,36 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
           final allData = snapshot.data ?? [];
 
+          // --- SMART & PAKKA FILTER ---
           List<ProviderModel> providers = allData
               .map((map) => ProviderModel.fromMap(map))
-              .where((p) =>
-          p.profession.trim().toLowerCase() == widget.categoryName.trim().toLowerCase()
-          ).toList();
+              .where((p) {
+            String providerProf = p.profession.trim().toLowerCase();
+            String categoryProf = widget.categoryName.trim().toLowerCase();
+
+            return providerProf == categoryProf ||
+                providerProf.contains(categoryProf) ||
+                categoryProf.contains(providerProf);
+          }).toList();
 
           if (_searchQuery.isNotEmpty) {
             providers = providers.where((p) => p.name.toLowerCase().contains(_searchQuery)).toList();
           }
 
+          // --- ADVANCED SORTING (Distance, Price, Rating) ---
           if (_activeSort == "Price") {
             providers.sort((a, b) => a.pricePerHour.compareTo(b.pricePerHour));
-          } else {
+          } else if (_activeSort == "Rating") {
             providers.sort((a, b) => b.averageRating.compareTo(a.averageRating));
+          } else {
+            // Distance sorting logic
+            providers.sort((a, b) {
+              double distA = _calculateDistance(a.latitude ?? 0.0, a.longitude ?? 0.0);
+              double distB = _calculateDistance(b.latitude ?? 0.0, b.longitude ?? 0.0);
+              if (distA == -1.0) return 1;
+              if (distB == -1.0) return -1;
+              return distA.compareTo(distB);
+            });
           }
 
           if (providers.isEmpty) return _buildEmptyState();
@@ -112,7 +162,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
       onTap: () => setState(() => _activeSort = label),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? Colors.blueAccent : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -132,6 +182,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
   Widget _buildProviderCard(ProviderModel provider) {
     bool isNew = provider.totalReviews < 3;
+    double distance = _calculateDistance(provider.latitude ?? 0.0, provider.longitude ?? 0.0);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -143,7 +194,11 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderDetailScreen(provider: provider))),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderDetailScreen(
+          provider: provider,
+          customerLatitude: widget.customerLatitude,  // Jo List Screen par aaya tha
+          customerLongitude: widget.customerLongitude,
+        ))),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -171,12 +226,30 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)
                         ),
                         const SizedBox(width: 8),
-                        Text("• Verified Expert", style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.w500)),
+
+                        // --- LIVE DISTANCE TAG ---
+                        if (distance != -1.0)
+                          Text(
+                            "• ${distance.toStringAsFixed(1)} km away",
+                            style: TextStyle(color: Colors.blueGrey[600], fontSize: 12, fontWeight: FontWeight.w600),
+                          )
+                        else
+                          Text(
+                            "• Location N/A",
+                            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text("PKR ${provider.pricePerHour.toInt()}/hr",
-                        style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.w800, fontSize: 15)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("PKR ${provider.pricePerHour.toInt()}/hr",
+                            style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.w800, fontSize: 15)),
+
+                        Text("Verified Expert", style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ],
                 ),
               ),

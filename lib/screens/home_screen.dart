@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart'; // Naya package location k liye
+import 'package:geocoding/geocoding.dart'; // Naya package address text k liye
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/provider_list_screen.dart';
 import 'package:handyman_app/widgets/category_card.dart';
@@ -16,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final List<ServiceModel> categories = [
     ServiceModel(id: '1', name: 'Plumbing', icon: Icons.plumbing, color: Colors.blue),
-    ServiceModel(id: '2', name: 'Electrical', icon: Icons.electrical_services, color: Colors.orange),
+    ServiceModel(id: '2', name: 'Electrician', icon: Icons.electrical_services, color: Colors.orange),
     ServiceModel(id: '3', name: 'Cleaning', icon: Icons.cleaning_services, color: Colors.green),
     ServiceModel(id: '4', name: 'Painting', icon: Icons.format_paint, color: Colors.purple),
     ServiceModel(id: '5', name: 'Carpentry', icon: Icons.carpenter, color: Colors.brown),
@@ -24,6 +27,125 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   String searchQuery = "";
+
+  // --- Location State Variables ---
+  String currentAddress = "Fetching location...";
+  double? customerLat;
+  double? customerLng;
+
+  @override
+  void initState() {
+    super.initState();
+    _getCustomerLocation();
+  }
+
+
+  void _showGpsDialog(String title, String message, bool isOpenLocationSettings) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User majboor ho k option select kre
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.location_off_rounded, color: Colors.redAccent, size: 28),
+              const SizedBox(width: 10),
+              Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: Text(
+            message,
+            style: GoogleFonts.inter(color: Colors.grey[700], fontSize: 14, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context); // Popup band krein
+                if (isOpenLocationSettings) {
+                  await Geolocator.openLocationSettings(); // Mobile GPS settings
+                } else {
+                  await Geolocator.openAppSettings(); // App permissions settings
+                }
+                _getCustomerLocation(); // Settings se wapas aane pr automatic retry
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              child: Text(
+                isOpenLocationSettings ? "Turn On GPS" : "Grant Permission",
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // --- Background Location Fetching Logic ---
+  Future<void> _getCustomerLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() => currentAddress = "GPS is off");
+        _showGpsDialog(
+            "GPS is Disabled",
+            "Your mobile GPS is turned off. Please enable it to find the nearest handymen and experts around you.",
+            true
+        );
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() => currentAddress = "Permission denied");
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => currentAddress = "Permission blocked");
+        _showGpsDialog(
+            "Location Permission",
+            "Location access is permanently blocked. Please enable it from application settings to proceed.",
+            false
+        );
+        return;
+      }
+
+      // Location le rha h background me safely
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      customerLat = position.latitude;
+      customerLng = position.longitude;
+
+      // Coordinates se area/city ka naam nikalna
+      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        setState(() {
+          currentAddress = "${place.subLocality ?? place.street ?? ''}, ${place.locality ?? ''}".trim();
+          if (currentAddress.startsWith(',')) {
+            currentAddress = currentAddress.substring(1).trim();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching customer location: $e");
+      setState(() => currentAddress = "Location not found");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 10),
+
+                  // --- Clickable Location Header ---
+                  _buildLocationHeader(),
+
+                  const SizedBox(height: 15),
                   Text("Hello, $firstName! 👋",
                       style: GoogleFonts.inter(fontSize: 15, color: Colors.grey[600], fontWeight: FontWeight.w500)),
                   const SizedBox(height: 6),
@@ -136,7 +263,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (context) => ProviderListScreen(categoryName: service.name)
+                            builder: (context) => ProviderListScreen(
+                              categoryName: service.name,
+                              customerLatitude: customerLat,
+                              customerLongitude: customerLng,
+                            )
                         ),
                       );
                     },
@@ -147,6 +278,42 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // --- Beautiful Clean Location Header Design ---
+  Widget _buildLocationHeader() {
+    return GestureDetector(
+      onTap: () {
+        // Agar user khud click kre tab bhi fresh location fetch ya popup show ho sake
+        _getCustomerLocation();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.blue[50]?.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.location_on_rounded, color: Colors.blue[700], size: 20),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                currentAddress,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: Colors.blue[900],
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

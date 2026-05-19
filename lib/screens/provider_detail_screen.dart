@@ -11,7 +11,15 @@ final supabase = Supabase.instance.client;
 
 class ProviderDetailScreen extends StatefulWidget {
   final ProviderModel provider;
-  const ProviderDetailScreen({super.key, required this.provider});
+  final double? customerLatitude;
+  final double? customerLongitude;
+
+  const ProviderDetailScreen({
+    super.key,
+    required this.provider,
+    this.customerLatitude,
+    this.customerLongitude,
+  });
 
   @override
   State<ProviderDetailScreen> createState() => _ProviderDetailScreenState();
@@ -45,7 +53,13 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 30)),
       builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Colors.blueAccent)),
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Colors.blueAccent,
+            onPrimary: Colors.white,
+            onSurface: Colors.black87,
+          ),
+        ),
         child: child!,
       ),
     );
@@ -68,105 +82,138 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   }
 
   void _showConfirmation() {
-    String dateStr = DateFormat('EEEE, MMM d').format(_selectedDate!);
-    String timeStr = _selectedTime!.format(context);
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          padding: EdgeInsets.only(
-            left: 25, right: 25, top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 30,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
-              const SizedBox(height: 25),
-              Text("Confirm Your Booking", style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 25),
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: "Confirm Your Name",
-                  prefixIcon: const Icon(Icons.person_pin_rounded, color: Colors.blueAccent),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
+        builder: (context, setModalState) {
+          String dateStr = DateFormat('EEEE, MMM d').format(_selectedDate!);
+          String timeStr = _selectedTime!.format(context);
+
+          return Container(
+            padding: EdgeInsets.only(
+              left: 24, right: 24, top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 30,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                    width: 45,
+                    height: 5,
+                    decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))
                 ),
-              ),
-              const SizedBox(height: 20),
-              _buildInfoContainer(dateStr, timeStr),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 58,
-                child: ElevatedButton(
-                  onPressed: _isBooking ? null : () async {
-                    if (_nameController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please confirm your name")));
-                      return;
-                    }
-
-                    setModalState(() => _isBooking = true);
-
-                    try {
-                      final String uid = supabase.auth.currentUser?.id ?? "";
-
-                      final ratingData = await StorageService.getCustomerRatingData(uid);
-
-                      final newBooking = BookingModel(
-                        id: '',
-                        provider: widget.provider,
-                        customerName: _nameController.text.trim(),
-                        customerId: uid,
-                        date: _selectedDate!,
-                        time: timeStr,
-                        serviceName: widget.provider.profession,
-                        price: widget.provider.pricePerHour.toString(),
-                        status: 'Pending',
-                        customerAverageRating: ratingData['average_rating'],
-                        customerTotalReviews: ratingData['total_reviews'],
-                      );
-
-                      await StorageService.saveBooking(newBooking);
-
-                      if (!mounted) return;
-                      Navigator.pop(ctx);
-                      Navigator.pop(context);
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("Booking request sent to ${widget.provider.name}!"),
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } catch (e) {
-                      setModalState(() => _isBooking = false);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent[700],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    elevation: 0,
+                const SizedBox(height: 25),
+                Text(
+                    "Confirm Your Booking",
+                    style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)
+                ),
+                const SizedBox(height: 25),
+                TextField(
+                  controller: _nameController,
+                  style: GoogleFonts.inter(fontSize: 15),
+                  decoration: InputDecoration(
+                    labelText: "Confirm Your Name",
+                    labelStyle: TextStyle(color: Colors.grey[600]),
+                    prefixIcon: const Icon(Icons.person_pin_rounded, color: Colors.blueAccent),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Colors.blueAccent, width: 1.5),
+                    ),
                   ),
-                  child: _isBooking
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Confirm & Send Request", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 20),
+                _buildInfoContainer(dateStr, timeStr),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isBooking ? null : () async {
+                      if (_nameController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Please confirm your name"))
+                        );
+                        return;
+                      }
+
+                      setModalState(() => _isBooking = true);
+
+                      try {
+                        final String uid = supabase.auth.currentUser?.id ?? "";
+                        final ratingData = await StorageService.getCustomerRatingData(uid);
+
+                        final newBooking = BookingModel(
+                          id: '',
+                          provider: widget.provider,
+                          customerName: _nameController.text.trim(),
+                          customerId: uid,
+                          date: _selectedDate!,
+                          time: timeStr,
+                          serviceName: widget.provider.profession,
+                          price: widget.provider.pricePerHour.toString(),
+                          status: 'Pending',
+                          customerAverageRating: ratingData['average_rating'],
+                          customerTotalReviews: ratingData['total_reviews'],
+                          customerLatitude: widget.customerLatitude,
+                          customerLongitude: widget.customerLongitude,
+                        );
+
+                        await StorageService.saveBooking(newBooking);
+
+                        if (!mounted) return;
+                        Navigator.pop(ctx);
+                        Navigator.pop(context);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded, color: Colors.white),
+                                const SizedBox(width: 10),
+                                Text("Booking request sent to ${widget.provider.name}!"),
+                              ],
+                            ),
+                            backgroundColor: Colors.green.shade700,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      } catch (e) {
+                        setModalState(() => _isBooking = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent)
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent[700],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: _isBooking
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                        "Confirm & Send Request",
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -176,52 +223,96 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: 400,
+            expandedHeight: 380,
             pinned: true,
             stretch: true,
-            backgroundColor: Colors.blueAccent,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Hero(
-                tag: widget.provider.id,
-                child: _buildTopImage(),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+              child: CircleAvatar(
+                backgroundColor: Colors.black.withOpacity(0.35),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.parallax,
+              background: _buildTopImage(),
             ),
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(widget.provider.name, style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.bold)),
-                          Text(widget.provider.profession, style: const TextStyle(fontSize: 16, color: Colors.blueAccent, fontWeight: FontWeight.w600)),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                widget.provider.name,
+                                style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black87)
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                  widget.provider.profession,
+                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.blueAccent[700], fontWeight: FontWeight.w600)
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
-                        child: Text("Rs.${widget.provider.pricePerHour.toInt()}/hr", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(16)
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                                "Rs.${widget.provider.pricePerHour.toInt()}",
+                                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent[700])
+                            ),
+                            Text(
+                                "per hour",
+                                style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500)
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 26),
                   _buildStatsRow(),
                   const SizedBox(height: 32),
-                  Text("About Provider", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
+                  Text(
+                      "About Provider",
+                      style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87)
+                  ),
+                  const SizedBox(height: 10),
                   Text(
                     widget.provider.bio.isEmpty ? "No description available." : widget.provider.bio,
-                    style: TextStyle(color: Colors.grey[700], height: 1.6, fontSize: 15),
+                    style: GoogleFonts.inter(color: Colors.grey[700], height: 1.6, fontSize: 14.5),
                   ),
-                  const SizedBox(height: 120),
                 ],
               ),
             ),
@@ -230,16 +321,24 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       ),
       bottomSheet: Container(
         padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFEEEEEE)))),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, -4))],
+            border: const Border(top: BorderSide(color: Color(0xFFF1F5F9)))
+        ),
         child: SafeArea(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blueAccent[700],
-              minimumSize: const Size(double.infinity, 58),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
             ),
             onPressed: _pickDateTime,
-            child: const Text("Continue to Booking", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(
+                "Book Appointment",
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+            ),
           ),
         ),
       ),
@@ -252,8 +351,23 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       children: [
         widget.provider.imageUrl.startsWith('http')
             ? Image.network(widget.provider.imageUrl, fit: BoxFit.cover)
-            : Container(color: Colors.blue[100], child: const Icon(Icons.person, size: 100, color: Colors.white)),
-        Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.3), Colors.transparent, Colors.transparent, Colors.black.withOpacity(0.5)]))),
+            : Container(
+            color: Colors.blue[50],
+            child: Icon(Icons.person_rounded, size: 110, color: Colors.blueAccent.withOpacity(0.4))
+        ),
+        Container(
+            decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.35),
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.55)
+                    ]
+                )
+            )
+        ),
       ],
     );
   }
@@ -266,12 +380,12 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             Icons.star_rounded,
             isNew ? "New" : widget.provider.averageRating.toStringAsFixed(1),
             "Rating",
-            Colors.orange
+            Colors.amber.shade700
         ),
         const SizedBox(width: 12),
-        _statBox(Icons.verified_rounded, "Verified", "Identity", Colors.green),
+        _statBox(Icons.verified_user_rounded, "Verified", "Identity", Colors.green.shade600),
         const SizedBox(width: 12),
-        _statBox(Icons.work_history_rounded, "5+ Yrs", "Exp.", Colors.blue),
+        _statBox(Icons.bolt_rounded, "Active", "Status", Colors.blue.shade700),
       ],
     );
   }
@@ -279,14 +393,19 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   Widget _statBox(IconData icon, String value, String label, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade100)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF1F5F9))
+        ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(value, style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
+            const SizedBox(height: 2),
+            Text(label, style: GoogleFonts.inter(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -295,15 +414,19 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
 
   Widget _buildInfoContainer(String date, String time) {
     return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.withOpacity(0.1))),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.blue.withOpacity(0.08))
+      ),
       child: Column(
         children: [
           _buildInfoRow(Icons.calendar_month_rounded, "Scheduled Date", date),
-          const Divider(height: 20),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(color: Color(0xFFE2E8F0))),
           _buildInfoRow(Icons.watch_later_rounded, "Arrival Time", time),
-          const Divider(height: 20),
-          _buildInfoRow(Icons.payments_rounded, "Estimated Rate", "Rs. ${widget.provider.pricePerHour}/hr", isLast: true),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(color: Color(0xFFE2E8F0))),
+          _buildInfoRow(Icons.payments_rounded, "Estimated Rate", "Rs. ${widget.provider.pricePerHour.toInt()}/hr", isLast: true),
         ],
       ),
     );
@@ -312,11 +435,11 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   Widget _buildInfoRow(IconData icon, String label, String value, {bool isLast = false}) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.blueAccent),
+        Icon(icon, size: 20, color: Colors.blueAccent[700]),
         const SizedBox(width: 12),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(label, style: GoogleFonts.inter(color: Colors.grey[600], fontSize: 13.5, fontWeight: FontWeight.w500)),
         const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(value, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
       ],
     );
   }
