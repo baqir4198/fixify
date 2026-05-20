@@ -11,13 +11,11 @@ class BookingModel {
   final String price;
   final String status;
 
-  // --- Schema Based Rating Fields ---
   final double? providerRating;
   final double? customerRating;
   final double? customerAverageRating;
   final int? customerTotalReviews;
 
-  // --- UPGRADE: Location coordinates fields add kar di hain ---
   final double? customerLatitude;
   final double? customerLongitude;
 
@@ -35,7 +33,6 @@ class BookingModel {
     this.customerRating,
     this.customerAverageRating,
     this.customerTotalReviews,
-    // Constructor mein shamil kiya
     this.customerLatitude,
     this.customerLongitude,
   });
@@ -57,7 +54,6 @@ class BookingModel {
       customerAverageRating: _toDouble(map['customer_average_rating']),
       customerTotalReviews: map['customer_total_reviews'] as int?,
 
-      // --- Map se double values safe extraction ---
       customerLatitude: _toDouble(map['customer_latitude']),
       customerLongitude: _toDouble(map['customer_longitude']),
     );
@@ -77,7 +73,6 @@ class BookingModel {
       'provider_rating': providerRating,
       'customer_rating': customerRating,
 
-      // --- Supabase table columns ke liye mapping ---
       'customer_latitude': customerLatitude,
       'customer_longitude': customerLongitude,
     };

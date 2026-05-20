@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase Client
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import '../models/provider_model.dart';
 
 class BecomeProviderScreen extends StatefulWidget {
   const BecomeProviderScreen({super.key});
@@ -38,7 +37,6 @@ class _BecomeProviderScreenState extends State<BecomeProviderScreen> {
     }
   }
 
-  // --- Supabase Upload Helper ---
   Future<String> _uploadFile(File file, String bucket, String fileName) async {
     final String path = '$bucket/$fileName';
 

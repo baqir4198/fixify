@@ -12,7 +12,6 @@ class ProviderModel {
   final String cnicUrl;
   final String bio;
 
-  // --- Naye Location Fields ---
   final double? latitude;
   final double? longitude;
 
@@ -27,8 +26,8 @@ class ProviderModel {
     required this.imageUrl,
     required this.cnicUrl,
     required this.bio,
-    this.latitude,  // Optional rkha h taake purana data ya customer model crash na kre
-    this.longitude, // Optional rkha h
+    this.latitude,
+    this.longitude,
   });
 
   factory ProviderModel.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -44,7 +43,6 @@ class ProviderModel {
       cnicUrl: map['cnic_url']?.toString() ?? '',
       bio: map['bio']?.toString() ?? (map['about']?.toString() ?? 'No description provided.'),
 
-      // --- Supabase se map krte waqt safely double convert krna ---
       latitude: map['latitude'] != null ? _toDouble(map['latitude']) : null,
       longitude: map['longitude'] != null ? _toDouble(map['longitude']) : null,
     );
@@ -63,7 +61,6 @@ class ProviderModel {
       'cnic_url': cnicUrl,
       'bio': bio,
 
-      // --- Database me push krne k liye keys ---
       'latitude': latitude,
       'longitude': longitude,
     };

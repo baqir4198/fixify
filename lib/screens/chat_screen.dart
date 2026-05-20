@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/models/message_model.dart';
-import 'package:handyman_app/services/storage_service.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
