@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart'; // Naya package address conversion k liye
+import 'package:geocoding/geocoding.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:handyman_app/models/provider_model.dart';
@@ -25,11 +25,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _costController = TextEditingController();
 
-  // Naye controllers user k asani k liye
   final _cityController = TextEditingController();
   final _addressController = TextEditingController();
 
-  // Background controllers jo database me value bhejein ge
   String _detectedLatitude = "";
   String _detectedLongitude = "";
 
@@ -54,7 +52,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  // --- Automatic Location Fetching ---
   Future<void> _autoFetchLocation() async {
     setState(() => _isFetchingLocation = true);
     try {
@@ -79,11 +76,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Background variables me save kr lia
       _detectedLatitude = position.latitude.toString();
       _detectedLongitude = position.longitude.toString();
 
-      // Reverse Geocoding: Coordinates se city aur address khud dhoondna
       List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
@@ -105,7 +100,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // --- Manual Address ko Coordinates me badalna ---
   Future<bool> _convertAddressToCoordinates() async {
     String fullAddress = "${_addressController.text.trim()}, ${_cityController.text.trim()}";
     try {
@@ -194,7 +188,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     double longitude = 0.0;
 
     if (currentRole == "Provider") {
-      // Agar user ne manual text likha tha aur auto GPS pick nahi kiya tha
       if (_detectedLatitude.isEmpty || _detectedLongitude.isEmpty) {
         bool success = await _convertAddressToCoordinates();
         if (!success) {
@@ -248,7 +241,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       dataToInsert['average_rating'] = 5.0;
       dataToInsert['total_reviews'] = 0;
 
-      // Address string format me save krwane k liye extra columns add kr skte hain bad me
       dataToInsert['latitude'] = latitude;
       dataToInsert['longitude'] = longitude;
 
@@ -330,7 +322,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             _buildTextField(_emailController, "Email", Icons.email_outlined, isEmail: true),
             const SizedBox(height: 15),
 
-            // --- Location Section (Sirf Provider k liye) ---
             if (isProvider) ...[
               const Text("Provider Location Setup", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
@@ -414,7 +405,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: GestureDetector(
         onTap: () => setState(() => {
           userRole = role,
-          // Role change krne par controllers clear ho jyen ge
           if(role == "Customer") {
             _cityController.clear(),
             _addressController.clear(),

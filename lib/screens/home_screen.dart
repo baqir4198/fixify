@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart'; // Naya package location k liye
-import 'package:geocoding/geocoding.dart'; // Naya package address text k liye
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/provider_list_screen.dart';
 import 'package:handyman_app/widgets/category_card.dart';
@@ -28,7 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String searchQuery = "";
 
-  // --- Location State Variables ---
   String currentAddress = "Fetching location...";
   double? customerLat;
   double? customerLng;
@@ -43,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showGpsDialog(String title, String message, bool isOpenLocationSettings) {
     showDialog(
       context: context,
-      barrierDismissible: false, // User majboor ho k option select kre
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -65,13 +64,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(context); // Popup band krein
+                Navigator.pop(context);
                 if (isOpenLocationSettings) {
-                  await Geolocator.openLocationSettings(); // Mobile GPS settings
+                  await Geolocator.openLocationSettings();
                 } else {
-                  await Geolocator.openAppSettings(); // App permissions settings
+                  await Geolocator.openAppSettings();
                 }
-                _getCustomerLocation(); // Settings se wapas aane pr automatic retry
+                _getCustomerLocation();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blueAccent,
@@ -89,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- Background Location Fetching Logic ---
+
   Future<void> _getCustomerLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -122,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // Location le rha h background me safely
+
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
@@ -130,7 +129,6 @@ class _HomeScreenState extends State<HomeScreen> {
       customerLat = position.latitude;
       customerLng = position.longitude;
 
-      // Coordinates se area/city ka naam nikalna
       List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
@@ -189,7 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // --- Clickable Location Header ---
                   _buildLocationHeader(),
 
                   const SizedBox(height: 15),
@@ -282,11 +279,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- Beautiful Clean Location Header Design ---
   Widget _buildLocationHeader() {
     return GestureDetector(
       onTap: () {
-        // Agar user khud click kre tab bhi fresh location fetch ya popup show ho sake
+
         _getCustomerLocation();
       },
       child: Container(

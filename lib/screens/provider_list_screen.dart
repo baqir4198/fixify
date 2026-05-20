@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart'; // --- Distance nikalne k liye package ---
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/screens/provider_detail_screen.dart';
@@ -10,7 +10,6 @@ final supabase = Supabase.instance.client;
 
 class ProviderListScreen extends StatefulWidget {
   final String categoryName;
-  // --- HomeScreen se bhejay gaye coordinates accept krne k liye variables ---
   final double? customerLatitude;
   final double? customerLongitude;
 
@@ -27,9 +26,8 @@ class ProviderListScreen extends StatefulWidget {
 
 class _ProviderListScreenState extends State<ProviderListScreen> {
   String _searchQuery = "";
-  String _activeSort = "Distance"; // Default sort ab Distance pr set kr dia h
+  String _activeSort = "Distance";
 
-  // Helper function: Distance calculation k liye (Safe Version)
   double _calculateDistance(double providerLat, double providerLng) {
     final double? lat = widget.customerLatitude;
     final double? lng = widget.customerLongitude;
@@ -44,7 +42,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
       providerLat,
       providerLng,
     );
-    return distanceInMeters / 1000; // Kilometers me convert kia
+    return distanceInMeters / 1000;
   }
 
   @override
@@ -112,7 +110,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
 
           final allData = snapshot.data ?? [];
 
-          // --- SMART & PAKKA FILTER ---
           List<ProviderModel> providers = allData
               .map((map) => ProviderModel.fromMap(map))
               .where((p) {
@@ -128,13 +125,11 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
             providers = providers.where((p) => p.name.toLowerCase().contains(_searchQuery)).toList();
           }
 
-          // --- ADVANCED SORTING (Distance, Price, Rating) ---
           if (_activeSort == "Price") {
             providers.sort((a, b) => a.pricePerHour.compareTo(b.pricePerHour));
           } else if (_activeSort == "Rating") {
             providers.sort((a, b) => b.averageRating.compareTo(a.averageRating));
           } else {
-            // Distance sorting logic
             providers.sort((a, b) {
               double distA = _calculateDistance(a.latitude ?? 0.0, a.longitude ?? 0.0);
               double distB = _calculateDistance(b.latitude ?? 0.0, b.longitude ?? 0.0);
@@ -196,7 +191,7 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
         borderRadius: BorderRadius.circular(20),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderDetailScreen(
           provider: provider,
-          customerLatitude: widget.customerLatitude,  // Jo List Screen par aaya tha
+          customerLatitude: widget.customerLatitude,
           customerLongitude: widget.customerLongitude,
         ))),
         child: Padding(
@@ -227,7 +222,6 @@ class _ProviderListScreenState extends State<ProviderListScreen> {
                         ),
                         const SizedBox(width: 8),
 
-                        // --- LIVE DISTANCE TAG ---
                         if (distance != -1.0)
                           Text(
                             "• ${distance.toStringAsFixed(1)} km away",
