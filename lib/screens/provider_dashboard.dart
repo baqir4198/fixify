@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:handyman_app/models/provider_model.dart';
 import 'package:handyman_app/models/booking_model.dart';
 import 'package:handyman_app/services/storage_service.dart';
+import 'package:geolocator/geolocator.dart'; // --- Distance calculation ke liye ---
+import 'package:url_launcher/url_launcher.dart'; // --- Google Maps open karne ke liye ---
 import 'edit_profile_screen.dart';
 import 'messages_list_screen.dart';
 
@@ -28,6 +30,44 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     currentProvider = widget.provider;
   }
 
+  // Helper function: Provider aur Customer ke beech distance nikalne ke liye
+  double _calculateDistance(double? customerLat, double? customerLng) {
+    final double? pLat = currentProvider.latitude;
+    final double? pLng = currentProvider.longitude;
+
+    if (pLat == null || pLng == null || customerLat == null || customerLng == null) {
+      return -1.0;
+    }
+
+    double distanceInMeters = Geolocator.distanceBetween(pLat, pLng, customerLat, customerLng);
+    return distanceInMeters / 1000; // Kilometers mein convert kiya
+  }
+
+  // Google Maps par exact location pinpoint karne ka fixed function
+  Future<void> _openMaps(double lat, double lng, String customerName) async {
+    final String googleMapsUrl = "geo:$lat,$lng?q=$lat,$lng($customerName)";
+    final String appleMapsUrl = "https://maps.apple.com/?q=$customerName&ll=$lat,$lng";
+
+    try {
+      if (Platform.isIOS) {
+        final Uri appleUri = Uri.parse(appleMapsUrl);
+        if (await canLaunchUrl(appleUri)) {
+          await launchUrl(appleUri, mode: LaunchMode.externalApplication);
+          return;
+        }
+      }
+
+      final Uri androidUri = Uri.parse(googleMapsUrl);
+      if (await canLaunchUrl(androidUri)) {
+        await launchUrl(androidUri, mode: LaunchMode.externalApplication);
+      } else {
+        final String fallbackUrl = "https://www.google.com/maps/search/?api=1&query=$lat,$lng";
+        await launchUrl(Uri.parse(fallbackUrl), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      _showSnackBar("Could not open Maps: $e", Colors.red);
+    }
+  }
 
   void acceptRequest(BookingModel booking) async {
     try {
@@ -50,7 +90,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
   void completeJob(BookingModel booking) {
     _showCustomerRatingDialog(booking);
   }
-
 
   void _showCustomerRatingDialog(BookingModel booking) {
     double selectedRating = 5.0;
@@ -212,7 +251,6 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
     );
   }
 
-
   Widget _buildHeader() {
     return Row(
       children: [
@@ -267,6 +305,8 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
   }
 
   Widget _buildRequestCard(BookingModel booking) {
+    double distance = _calculateDistance(booking.customerLatitude, booking.customerLongitude);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -280,7 +320,19 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(booking.customerName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
                 _buildClientRatingBadge(booking),
-                Text(booking.serviceName, style: GoogleFonts.inter(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 2),
+
+                // --- LIVE DISTANCE TAG FOR PROVIDER ---
+                Row(
+                  children: [
+                    Icon(Icons.location_on_rounded, size: 12, color: distance != -1.0 ? Colors.blueAccent : Colors.grey),
+                    const SizedBox(width: 3),
+                    Text(
+                      distance != -1.0 ? "${distance.toStringAsFixed(1)} km away" : "Location N/A",
+                      style: GoogleFonts.inter(color: distance != -1.0 ? Colors.blueAccent[700] : Colors.grey, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ])),
               Text("Rs.${booking.price}", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.blue)),
             ],
@@ -331,16 +383,29 @@ class _ProviderDashboardState extends State<ProviderDashboard> {
         title: Text(booking.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(isFinished ? "Waiting for Customer to Close..." : booking.serviceName,
             style: TextStyle(fontSize: 12, color: isFinished ? Colors.orange : Colors.grey)),
-        trailing: isFinished
-            ? const Icon(Icons.check_circle, color: Colors.orange)
-            : ElevatedButton(
-            onPressed: () => completeJob(booking),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-            ),
-            child: const Text("Finish")),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- GOOGLE MAPS REDIRECTION BUTTON ---
+            if (!isFinished && booking.customerLatitude != null && booking.customerLongitude != null)
+              IconButton(
+                icon: const Icon(Icons.map_rounded, color: Colors.blueAccent),
+                onPressed: () => _openMaps(booking.customerLatitude!, booking.customerLongitude!, booking.customerName),
+                tooltip: "Navigate on Google Maps",
+              ),
+            const SizedBox(width: 4),
+            isFinished
+                ? const Icon(Icons.check_circle, color: Colors.orange)
+                : ElevatedButton(
+                onPressed: () => completeJob(booking),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                ),
+                child: const Text("Finish")),
+          ],
+        ),
       ),
     );
   }
